@@ -20,6 +20,7 @@ export async function GET(request: Request) {
   if (denied) return Response.json({ error: denied }, { status: 401 });
   if (!kitsasIsConfigured()) return Response.json({ error: 'Kitsas has not been configured.' }, { status: 409 });
 
+  /** Incremental unless asked otherwise; the schedule decides which runs when. */
   const mode: SyncMode = new URL(request.url).searchParams.get('mode') === 'full' ? 'full' : 'incremental';
   const budgetIds = await syncableBudgetIds();
   // One cache for the whole run: every budget reads the same book.
