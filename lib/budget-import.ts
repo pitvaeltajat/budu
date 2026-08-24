@@ -83,6 +83,32 @@ function parseSimpleBudget(records: RecordRow[], submittedName: string): ParsedB
   return { name: submittedName || text(value('budget_name')) || 'Imported budget', currency: (text(value('currency')) || 'EUR').toUpperCase(), lines: unique(lines) };
 }
 
+
+/**
+ * Finnish genitive for the handful of section names a budget uses, so a bare
+ * "Tuotot" can be read as "Varsinaisen toiminnan tuotot". Inflects the last
+ * word, plus any preceding -inen adjective that has to agree with it. Anything
+ * this does not recognise keeps its own shape with an -n, which is the ordinary
+ * case, and the heading stays readable either way.
+ */
+export function genitive(value: string) {
+  const inflect = (word: string) => {
+    if (/inen$/i.test(word)) return word.replace(/inen$/i, 'isen');
+    if (/[nl]t[aä]$/i.test(word)) return word.replace(/t([aä])$/i, (_, vowel) => (vowel === 'ä' ? 'nän' : 'nan'));
+    if (/[aä]$/i.test(word)) return `${word}n`;
+    if (/s$/i.test(word)) return word.replace(/s$/i, 'ksen');
+    return `${word}n`;
+  };
+  const words = value.split(' ');
+  const last = words.length - 1;
+  return words
+    .map((word, index) => (index === last || /inen$/i.test(word) ? inflect(word) : word))
+    .join(' ');
+}
+
+/** Headings that say nothing on their own and need their section for context. */
+const isGenericHeading = (value: string) => /^(tuotot|kulut)$/i.test(value.trim());
+
 /** Parse the Finnish multi-year Talousarvio export, selecting its rightmost year column. */
 function parseTalousarvio(rows: unknown[][], submittedName: string): ParsedBudget {
   const yearRow = rows.find((row) => row.some((value) => /^20\d{2}$/.test(text(value))));
@@ -91,19 +117,26 @@ function parseTalousarvio(rows: unknown[][], submittedName: string): ParsedBudge
   const selected = years.at(-1);
   if (!selected) throw new Error('Could not find a budget-year column.');
   const lines: BudgetImportLine[] = [];
-  let groupName: string | undefined;
+  let section: string | undefined;
+  let subsection: string | undefined;
   for (const row of rows) {
     const account = Number(text(row[1])); const description = text(row[2]); const planned = text(row[selected.index]);
     /**
-     * Section headings sit alone in the first column with no account and no
-     * figures. Summary rows such as "Kulujäämä" and "Tilikauden tulos" also sit
-     * there, so require the row to be free of amounts before treating it as a
-     * heading, otherwise every subtotal would rename the section below it.
+     * Section headings sit alone with no account and no figures. Summary rows
+     * such as "Kulujäämä" and "Tilikauden tulos" share that column, so require
+     * the row to be free of amounts, otherwise every subtotal would rename the
+     * section below it. Headings appear in the first column under "Varsinainen
+     * toiminta" and in the second under the later sections, so accept either.
      */
-    const heading = text(row[0]);
     const hasFigures = row.some((cell, column) => column > 2 && /\d/.test(text(cell)) && Number.isFinite(euroCents(cell)));
-    if (heading && !text(row[1]) && !hasFigures) {
-      groupName = heading;
+    const heading = !hasFigures && !description
+      ? text(row[0]) || (Number.isNaN(account) ? text(row[1]) : '')
+      : '';
+    if (heading) {
+      // "Tuotot" and "Kulut" recur under several sections and mean nothing
+      // alone, so they qualify the section rather than replacing it.
+      if (isGenericHeading(heading)) subsection = heading;
+      else { section = heading; subsection = undefined; }
       continue;
     }
     if (!Number.isInteger(account) || !description) continue;
@@ -111,6 +144,15 @@ function parseTalousarvio(rows: unknown[][], submittedName: string): ParsedBudge
     // than an invalid row. Keep them so every Kitsas account remains mapped.
     const plannedCents = planned ? euroCents(planned) : 0;
     if (!Number.isFinite(plannedCents)) throw new Error(`Invalid ${selected.year} amount for account ${account}.`);
+    /**
+     * A section such as "Kammin tuotot ja kulut" already names both sides, so
+     * qualifying it again would read as "Kammin tuotot ja kulutn tuotot". Where
+     * the section already says the word, let it stand for both subsections.
+     */
+    const redundant = Boolean(section && subsection && section.toLowerCase().includes(subsection.toLowerCase()));
+    const groupName = subsection && !redundant
+      ? `${section ? `${genitive(section)} ` : ''}${subsection.toLowerCase()}`.trim()
+      : section;
     lines.push({ category: `${account} — ${description}`, description, groupName, kitsasAccount: account, plannedCents, kind: rowKind(undefined, account) });
   }
   if (!lines.length) throw new Error('No account rows were found in the Talousarvio file.');

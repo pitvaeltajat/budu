@@ -2,8 +2,11 @@ import * as XLSX from 'xlsx';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { parseBudgetWorksheet } from '@/lib/budget-import';
+import { kitsasIsConfigured } from '@/lib/kitsas';
+import { syncBudget } from '@/lib/kitsas-sync';
 
 export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -19,6 +22,18 @@ export async function POST(request: Request) {
     const submittedName = String(form.get('name') ?? '').trim();
     const parsed = parseBudgetWorksheet(rows, submittedName);
     const budget = await prisma.budget.create({ data: { name: parsed.name, currency: parsed.currency, startsOn: parsed.startsOn, endsOn: parsed.endsOn, createdById: session.user.id, lines: { create: parsed.lines.map((row, sortOrder) => ({ ...row, sortOrder })) } } });
-    return Response.json({ id: budget.id, lines: parsed.lines.length }, { status: 201 });
+    /**
+     * Realized expenses hang off the budget, so a freshly imported one starts
+     * empty and would stay that way until the next nightly cron. Fill it here
+     * instead: replacing a budget should not blank the dashboard for a day.
+     * A failure is reported but does not fail the import, which succeeded.
+     */
+    let synced: number | null = null;
+    let syncError: string | undefined;
+    if (kitsasIsConfigured()) {
+      try { synced = (await syncBudget(budget.id, 'full')).imported; }
+      catch (error) { syncError = error instanceof Error ? error.message : 'Kitsas sync failed.'; }
+    }
+    return Response.json({ id: budget.id, lines: parsed.lines.length, synced, syncError }, { status: 201 });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Could not read this file.' }, { status: 400 }); }
 }
