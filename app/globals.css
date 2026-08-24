@@ -30,7 +30,7 @@ a:hover, button:hover { text-decoration: none; }
 .eyebrow { margin: 0 0 8px; color: var(--primary); font-size: 12px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 h1 { margin: 0 0 10px; color: var(--foreground); font-size: 34px; letter-spacing: -1.2px; line-height: 1.15; } h2 { margin: 0; color: var(--foreground); font-size: 18px; } .lede { margin: 0; color: var(--muted-foreground); }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 24px; color: var(--foreground); box-shadow: 0 1px 2px rgb(34 30 93 / 7%); }
-.summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 28px 0 16px; }.summary strong { display: block; margin-top: 8px; font-size: 28px; letter-spacing: -.8px; }.label { color: var(--muted-foreground); font-size: 13px; }
+.summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 28px 0 16px; }.summary strong { display: block; margin-top: 8px; font-size: 28px; letter-spacing: -.8px; }.label { color: var(--muted-foreground); font-size: 13px; }
 .grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }.section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 16px; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; } th { color: var(--muted-foreground); font-size: 12px; font-weight: 650; text-align: left; } th, td { border-bottom: 1px solid var(--border); padding: 12px 6px; } tr:last-child td { border-bottom: 0; }.right { text-align: right; }.positive { color: var(--success); }.negative { color: var(--destructive); }
 .empty { border: 1px dashed var(--border); border-radius: 6px; padding: 18px; color: var(--muted-foreground); line-height: 1.5; }.notice { margin: 16px 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--warning) 25%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--warning) 12%, var(--card)); color: var(--warning); font-size: 14px; }
@@ -40,4 +40,5 @@ table { width: 100%; border-collapse: collapse; font-size: 14px; } th { color: v
 .form-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }.form-row input { max-width: 100%; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--foreground); padding: 9px; }.form-row label { color: var(--muted-foreground); font-size: 13px; }
 code { border-radius: 4px; background: var(--muted); padding: 2px 4px; font-size: .9em; }
 button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (max-width: 980px) { .summary { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 760px) { .summary, .grid { grid-template-columns: 1fr; } .topbar { margin-bottom: 28px; }.user { align-items: flex-end; flex-direction: column; gap: 2px; } h1 { font-size: 30px; } }
