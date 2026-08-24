@@ -21,6 +21,7 @@ export type CategoryDetailProps = {
   plannedCents: number;
   periodStart: string;
   periodEnd: string;
+  todayIso: string;
   previousStart: string;
   current: CategoryItem[];
   previous: CategoryItem[];
@@ -35,23 +36,24 @@ const shortDate = (iso: string) => new Intl.DateTimeFormat('fi-FI', { day: 'nume
 const fullDate = (iso: string) => new Intl.DateTimeFormat('fi-FI').format(new Date(iso));
 const dayOffset = (iso: string, from: string) => Math.round((Date.parse(iso) - Date.parse(from)) / DAY);
 
-/** Running total by day offset, so both years share one x scale. */
+/**
+ * One point per expense rather than per day, so each booking gets its own dot
+ * and can be traced back to its row in the list. Same-day bookings stack into
+ * separate steps at the same x, which is what actually happened.
+ */
 function cumulative(items: CategoryItem[], from: string) {
-  const byDay = new Map<number, number>();
-  for (const item of items) {
-    const day = dayOffset(item.date, from);
-    byDay.set(day, (byDay.get(day) || 0) + item.amountCents);
-  }
   let total = 0;
-  return [...byDay.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([day, amount]) => ({ day, total: (total += amount) }));
+  return [...items]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((item) => ({ day: dayOffset(item.date, from), total: (total += item.amountCents), id: item.id }));
 }
 
 export function CategoryDetail(props: CategoryDetailProps) {
-  const { category, kind, account, currency, plannedCents, periodStart, periodEnd, previousStart } = props;
+  const { category, kind, account, currency, plannedCents, periodStart, periodEnd, todayIso, previousStart } = props;
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const [open, setOpen] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -60,11 +62,19 @@ export function CategoryDetail(props: CategoryDetailProps) {
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
+  useEffect(() => {
+    if (!activeId) return;
+    rowRefs.current.get(activeId)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [activeId]);
+
   const totalDays = Math.max(1, dayOffset(periodEnd, periodStart));
   const currentSeries = cumulative(props.current, periodStart);
   const previousSeries = cumulative(props.previous, previousStart);
   const currentTotal = currentSeries.at(-1)?.total ?? 0;
   const previousTotal = previousSeries.at(-1)?.total ?? 0;
+  /** The like-for-like figure, so the tile matching the table's column keeps its meaning. */
+  const elapsed = dayOffset(todayIso, periodStart);
+  const previousToDate = previousSeries.reduce((total, point) => (point.day <= elapsed ? point.total : total), 0);
 
   return (
     <>
@@ -90,16 +100,20 @@ export function CategoryDetail(props: CategoryDetailProps) {
             <div className="modal-summary">
               <div><span className="label">Arvio</span><strong>{moneyExact(plannedCents, currency)}</strong></div>
               <div><span className="label">Tänä vuonna</span><strong>{moneyExact(currentTotal, currency)}</strong></div>
-              <div><span className="label">Viime vuonna</span><strong>{moneyExact(previousTotal, currency)}</strong></div>
+              <div><span className="label">Viime vuonna samaan aikaan</span><strong>{moneyExact(previousToDate, currency)}</strong></div>
+              <div><span className="label">Viime vuosi yhteensä</span><strong>{moneyExact(previousTotal, currency)}</strong></div>
             </div>
 
             <Chart
               totalDays={totalDays}
+              elapsedDays={Math.max(0, Math.min(totalDays, elapsed))}
               plannedCents={plannedCents}
               currency={currency}
               periodStart={periodStart}
               current={currentSeries}
               previous={previousSeries}
+              activeId={activeId}
+              onActiveChange={setActiveId}
             />
 
             <h3 className="modal-subhead">Kirjaukset tänä vuonna</h3>
@@ -107,7 +121,11 @@ export function CategoryDetail(props: CategoryDetailProps) {
               <table>
                 <tbody>
                   {props.current.map((item) => (
-                    <tr key={item.id}>
+                    <tr
+                      key={item.id}
+                      ref={(node) => { if (node) rowRefs.current.set(item.id, node); else rowRefs.current.delete(item.id); }}
+                      className={item.id === activeId ? 'is-active' : undefined}
+                    >
                       <td>
                         <strong>{item.description}</strong>
                         <br />
@@ -128,22 +146,28 @@ export function CategoryDetail(props: CategoryDetailProps) {
   );
 }
 
-type Point = { day: number; total: number };
+type Point = { day: number; total: number; id: string };
 
 function Chart({
   totalDays,
+  elapsedDays,
   plannedCents,
   currency,
   periodStart,
   current,
   previous,
+  activeId,
+  onActiveChange,
 }: {
   totalDays: number;
+  elapsedDays: number;
   plannedCents: number;
   currency: string;
   periodStart: string;
   current: Point[];
   previous: Point[];
+  activeId: string | null;
+  onActiveChange: (id: string | null) => void;
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const width = 680;
@@ -158,15 +182,16 @@ function Chart({
   const y = (cents: number) => pad.top + plotHeight - (cents / yMax) * plotHeight;
 
   /** Spending jumps on the day a voucher lands, so the line steps rather than slopes. */
-  const path = (points: Point[]) => {
+  const path = (points: Point[], until: number) => {
     if (!points.length) return '';
     const segments = [`M ${x(0)} ${y(0)}`];
     let last = 0;
     for (const point of points) {
+      if (point.day > until) break;
       segments.push(`L ${x(point.day)} ${y(last)}`, `L ${x(point.day)} ${y(point.total)}`);
       last = point.total;
     }
-    segments.push(`L ${x(totalDays)} ${y(last)}`);
+    segments.push(`L ${x(until)} ${y(last)}`);
     return segments.join(' ');
   };
   const totalAt = (points: Point[], day: number) => {
@@ -185,7 +210,7 @@ function Chart({
    */
   const endLabels = (() => {
     const labels = [];
-    if (current.length) labels.push({ text: 'Nyt', fill: CURRENT, weight: 650, y: y(current.at(-1)!.total) + 4, anchor: true });
+    if (current.length) labels.push({ text: 'Nyt', fill: CURRENT, weight: 650, y: y(totalAt(current, elapsedDays)) + 4, anchor: true });
     if (previous.length) labels.push({ text: 'Viime v.', fill: PREVIOUS, weight: 400, y: y(previous.at(-1)!.total) + 4, anchor: false });
     if (labels.length === 2 && Math.abs(labels[0].y - labels[1].y) < 14) {
       const other = labels[1];
@@ -203,9 +228,18 @@ function Chart({
         onMouseMove={(event) => {
           const box = event.currentTarget.getBoundingClientRect();
           const ratio = (event.clientX - box.left) / box.width;
-          setHover(Math.round(((ratio * width - pad.left) / plotWidth) * totalDays));
+          const day = Math.round(((ratio * width - pad.left) / plotWidth) * totalDays);
+          setHover(day);
+          /** Snap to a booking only when the pointer is genuinely near one. */
+          const tolerance = Math.max(3, Math.round(totalDays / 60));
+          let nearest: Point | null = null;
+          for (const point of current) {
+            if (Math.abs(point.day - day) > tolerance) continue;
+            if (!nearest || Math.abs(point.day - day) < Math.abs(nearest.day - day)) nearest = point;
+          }
+          onActiveChange(nearest ? nearest.id : null);
         }}
-        onMouseLeave={() => setHover(null)}
+        onMouseLeave={() => { setHover(null); onActiveChange(null); }}
       >
         <line x1={pad.left} y1={pad.top + plotHeight} x2={pad.left + plotWidth} y2={pad.top + plotHeight} stroke="var(--border)" strokeWidth="1" />
         {plannedCents > 0 && (
@@ -214,8 +248,14 @@ function Chart({
             <text x={pad.left + plotWidth + 8} y={y(plannedCents) + 4} fontSize="12" fill="var(--muted-foreground)">Arvio</text>
           </>
         )}
-        {previous.length > 0 && <path d={path(previous)} fill="none" stroke={PREVIOUS} strokeWidth="2" strokeLinejoin="round" />}
-        {current.length > 0 && <path d={path(current)} fill="none" stroke={CURRENT} strokeWidth="2" strokeLinejoin="round" />}
+        {previous.length > 0 && <path d={path(previous, totalDays)} fill="none" stroke={PREVIOUS} strokeWidth="2" strokeLinejoin="round" />}
+        {current.length > 0 && <path d={path(current, elapsedDays)} fill="none" stroke={CURRENT} strokeWidth="2" strokeLinejoin="round" />}
+        {previous.map((point) => (
+          <circle key={`p-${point.id}`} cx={x(point.day)} cy={y(point.total)} r="2.5" fill={PREVIOUS} stroke="var(--card)" strokeWidth="1.5" />
+        ))}
+        {current.filter((point) => point.day <= elapsedDays).map((point) => (
+          <circle key={`c-${point.id}`} cx={x(point.day)} cy={y(point.total)} r={point.id === activeId ? 5 : 3} fill={CURRENT} stroke="var(--card)" strokeWidth="2" />
+        ))}
         {endLabels.map((label) => (
           <text key={label.text} x={pad.left + plotWidth + 8} y={label.y} fontSize="12" fill={label.fill} fontWeight={label.weight}>
             {label.text}
@@ -227,6 +267,9 @@ function Chart({
             <circle cx={x(hoverDay)} cy={y(totalAt(previous, hoverDay))} r="4" fill={PREVIOUS} stroke="var(--card)" strokeWidth="2" />
             <circle cx={x(hoverDay)} cy={y(totalAt(current, hoverDay))} r="4" fill={CURRENT} stroke="var(--card)" strokeWidth="2" />
           </>
+        )}
+        {elapsedDays < totalDays && (
+          <line x1={x(elapsedDays)} y1={pad.top} x2={x(elapsedDays)} y2={pad.top + plotHeight} stroke="var(--border)" strokeWidth="1" strokeDasharray="3 4" />
         )}
         <text x={pad.left} y={height - 8} fontSize="12" fill="var(--muted-foreground)">{shortDate(periodStart)}</text>
         <text x={pad.left + plotWidth} y={height - 8} fontSize="12" fill="var(--muted-foreground)" textAnchor="end">{shortDate(dayToDate(totalDays))}</text>

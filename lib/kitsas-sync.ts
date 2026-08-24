@@ -62,13 +62,21 @@ function shiftYear(date: Date, years: number) {
   return shifted;
 }
 
+/**
+ * Two ranges: the current period up to today, and the whole of the previous
+ * period. The prior year is fetched in full rather than to the same date,
+ * because the chart uses a completed year to show where the current one is
+ * heading. The table still compares like-for-like; that narrowing happens at
+ * render time, on data we already hold.
+ */
 export function syncRanges(startsOn: Date | null, endsOn: Date | null, now: Date) {
   const start = startsOn || new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
-  const end = endsOn && endsOn < now ? endsOn : now;
+  const periodEnd = endsOn || new Date(Date.UTC(start.getUTCFullYear(), 11, 31));
+  const end = periodEnd < now ? periodEnd : now;
   const iso = (date: Date) => date.toISOString().slice(0, 10);
   return [
     { from: iso(start), to: iso(end) },
-    { from: iso(shiftYear(start, -1)), to: iso(shiftYear(end, -1)) },
+    { from: iso(shiftYear(start, -1)), to: iso(shiftYear(periodEnd, -1)) },
   ];
 }
 

@@ -55,3 +55,5 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .chart-readout { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 6px; font-size: 13px; color: var(--foreground); }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: baseline; }
 @media (max-width: 620px) { .modal-summary { grid-template-columns: 1fr; } }
+.modal tr.is-active td { background: color-mix(in srgb, var(--cta) 45%, var(--card)); }
+.modal tr.is-active td:first-child { box-shadow: inset 3px 0 0 #0d54d9; }
