@@ -16,8 +16,38 @@ export type ParsedBudget = {
 
 type RecordRow = Record<string, unknown>;
 
-const text = (value: unknown) => String(value ?? '').trim();
+function repairMojibake(value: string) {
+  // Some Finnish CSV exports contain UTF-8 bytes decoded once as Latin-1
+  // (e.g. "myÃ¶ntÃ¤mÃ¤t"). Repair that common form at the import boundary.
+  if (!/[ÃÂâ]/.test(value) || typeof Buffer === 'undefined') return value;
+  try {
+    const repaired = Buffer.from(value, 'latin1').toString('utf8');
+    return repaired.includes('�') ? value : repaired;
+  } catch {
+    return value;
+  }
+}
+
+const text = (value: unknown) => repairMojibake(String(value ?? '').trim());
 const normalized = (key: string) => key.trim().toLowerCase().replace(/\s+/g, '_');
+
+// The association's chart of accounts has income outside the usual 30xx
+// range too (fundraising, finance, extraordinary income and grants). Keep the
+// default explicit, while allowing an import row to override it.
+const incomeAccount = (account: number) => (
+  (account >= 3000 && account < 4000) ||
+  (account >= 5000 && account < 5100) ||
+  (account >= 6000 && account < 6100) ||
+  (account >= 7000 && account < 7100) ||
+  (account >= 7500 && account < 7600)
+);
+
+function rowKind(value: unknown, account?: number): 'INCOME' | 'EXPENSE' {
+  const override = text(value).toLowerCase();
+  if (['income', 'tulo', 'tuotto', 'revenue'].includes(override)) return 'INCOME';
+  if (['expense', 'meno', 'kulu', 'cost'].includes(override)) return 'EXPENSE';
+  return account !== undefined && incomeAccount(account) ? 'INCOME' : 'EXPENSE';
+}
 
 export function euroCents(value: unknown) {
   const amount = Number(text(value).replace(/\u00a0|\s/g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
@@ -39,7 +69,7 @@ function parseSimpleBudget(records: RecordRow[], submittedName: string): ParsedB
       plannedCents: euroCents(fields.planned),
       description: text(fields.description) || undefined,
       kitsasAccount: account ? Number(account) : undefined,
-      kind: account && Number(account) >= 3000 && Number(account) < 4000 ? 'INCOME' as const : 'EXPENSE' as const,
+      kind: rowKind(fields.kind || fields.type || fields.tulo_meno, account ? Number(account) : undefined),
     };
   }).filter((line) => line.category || Number.isFinite(line.plannedCents));
   if (!lines.length) throw new Error('No budget rows were found.');
@@ -65,7 +95,7 @@ function parseTalousarvio(rows: unknown[][], submittedName: string): ParsedBudge
     // than an invalid row. Keep them so every Kitsas account remains mapped.
     const plannedCents = planned ? euroCents(planned) : 0;
     if (!Number.isFinite(plannedCents)) throw new Error(`Invalid ${selected.year} amount for account ${account}.`);
-    lines.push({ category: `${account} — ${description}`, description, kitsasAccount: account, plannedCents, kind: account >= 3000 && account < 4000 ? 'INCOME' : 'EXPENSE' });
+    lines.push({ category: `${account} — ${description}`, description, kitsasAccount: account, plannedCents, kind: rowKind(undefined, account) });
   }
   if (!lines.length) throw new Error('No account rows were found in the Talousarvio file.');
   return {

@@ -16,3 +16,34 @@ test('Talousarvio rows retain tilinumero as the Kitsas account mapping', async (
   assert.deepEqual(result.lines[0], { category: '3010 — Retkituotot', description: 'Retkituotot', kitsasAccount: 3010, plannedCents: 400000, kind: 'INCOME' });
   assert.deepEqual(result.lines[1], { category: '4210 — Retkikulut', description: 'Retkikulut', kitsasAccount: 4210, plannedCents: 400000, kind: 'EXPENSE' });
 });
+
+test('Talousarvio uses income account ranges beyond 3000', async () => {
+  const { parseBudgetWorksheet } = await import('../lib/budget-import.ts');
+  const result = parseBudgetWorksheet([
+    ['', '', '', '2026'],
+    ['', '3500', 'Kammin vuokratuotot', '', '4000'],
+    ['', '5010', 'Pukkipalvelun tuotot', '', '350'],
+    ['', '7510', 'Kaupungin avustukset', '', '4600'],
+    ['', '4210', 'Retkikulut', '', '4000'],
+  ]);
+  assert.deepEqual(result.lines.map(({ kind }) => kind), ['INCOME', 'INCOME', 'INCOME', 'EXPENSE']);
+});
+
+test('simple imports allow a per-row kind override', async () => {
+  const { parseBudgetWorksheet } = await import('../lib/budget-import.ts');
+  const result = parseBudgetWorksheet([
+    ['category', 'planned', 'account', 'kind'],
+    ['Grant', '100', '4210', 'income'],
+    ['Correction', '100', '3010', 'expense'],
+  ]);
+  assert.deepEqual(result.lines.map(({ kind }) => kind), ['INCOME', 'EXPENSE']);
+});
+
+test('Talousarvio repairs UTF-8 decoded as Latin-1', async () => {
+  const { parseBudgetWorksheet } = await import('../lib/budget-import.ts');
+  const result = parseBudgetWorksheet([
+    ['', '', '', '2026'],
+    ['', '4271', 'Lippukunnan myÃ¶ntÃ¤mÃ¤t stipendit', '', '0'],
+  ]);
+  assert.equal(result.lines[0].description, 'Lippukunnan myöntämät stipendit');
+});
