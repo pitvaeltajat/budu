@@ -26,9 +26,10 @@ function Setup() { return <section className="setup"><p className="eyebrow">Aloi
 
 
 /**
- * Row status. Overspending is the loud case; running ahead of last year at the
- * same point in the period is the early warning. Income is judged the other way
- * up: passing the plan is the goal, and falling behind last year is the concern.
+ * Row status. Only states worth acting on are marked: overspending, and
+ * spending that is running ahead of last year at the same point in the period.
+ * Being under budget or behind last year is left unmarked, because underspend
+ * is a normal and perfectly acceptable state for a budget line to be in.
  *
  * "Ahead of last year" needs last year to have had something to be ahead of,
  * otherwise every newly used account would be flagged on its first booking.
@@ -38,7 +39,6 @@ type RowStatus = { tone: 'over' | 'ahead' | 'good'; label: string } | null;
 function rowStatus(kind: string, plannedCents: number, used: number, prior: number): RowStatus {
   if (kind === 'INCOME') {
     if (plannedCents > 0 && used >= plannedCents) return { tone: 'good', label: 'Tavoite saavutettu' };
-    if (prior > 0 && used < prior) return { tone: 'ahead', label: 'Jäljessä viime vuotta' };
     return null;
   }
   if (plannedCents > 0 && used > plannedCents) return { tone: 'over', label: 'Yli arvion' };
