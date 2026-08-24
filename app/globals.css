@@ -25,7 +25,8 @@ a:hover, button:hover { text-decoration: none; }
 
 .shell { max-width: 1280px; margin: 0 auto; padding: 0 16px 56px; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; margin: 0 -16px 40px; padding: 0 16px; background: var(--primary); color: var(--primary-foreground); box-shadow: 0 1px 3px rgb(34 30 93 / 18%); }
-.brand { color: inherit; font-size: 22px; font-weight: 750; letter-spacing: -.6px; text-decoration: none; }.brand span { color: var(--cta); }
+.brand { color: inherit; font-size: 22px; font-weight: 650; letter-spacing: .02em; line-height: 1; text-decoration: none; transition: transform .15s ease; }
+.brand:hover { transform: scale(1.05); }
 .user { display: flex; align-items: center; gap: 12px; font-size: 14px; }.link-button { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 4px 0; text-decoration: underline; text-underline-offset: 3px; }
 .eyebrow { margin: 0 0 8px; color: var(--primary); font-size: 12px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 h1 { margin: 0 0 10px; color: var(--foreground); font-size: 34px; letter-spacing: -1.2px; line-height: 1.15; } h2 { margin: 0; color: var(--foreground); font-size: 18px; } .lede { margin: 0; color: var(--muted-foreground); }
@@ -71,3 +72,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .attachment { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--card); padding: 2px 8px; color: var(--foreground); font-size: 11px; font-weight: 650; text-decoration: none; }
 .attachment:hover { background: var(--muted); }
 .attachment-name { max-width: 190px; overflow: hidden; color: var(--muted-foreground); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.badge { display: inline-block; margin-left: 8px; border: 1px solid transparent; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 650; white-space: nowrap; vertical-align: 1px; }
+.badge-over { border-color: color-mix(in srgb, var(--destructive) 32%, transparent); background: color-mix(in srgb, var(--destructive) 10%, var(--card)); color: var(--destructive); }
+.badge-ahead { border-color: color-mix(in srgb, var(--warning) 32%, transparent); background: color-mix(in srgb, var(--warning) 12%, var(--card)); color: var(--warning); }
+.badge-good { border-color: color-mix(in srgb, var(--success) 30%, transparent); background: color-mix(in srgb, var(--success) 10%, var(--card)); color: var(--success); }
