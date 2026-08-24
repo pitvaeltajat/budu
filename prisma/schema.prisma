@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  image     String?
+  createdAt DateTime @default(now())
+  budgets   Budget[]
+}
+
+model Budget {
+  id        String       @id @default(cuid())
+  name      String
+  currency  String       @default("EUR")
+  startsOn  DateTime?    @db.Date
+  endsOn    DateTime?    @db.Date
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  createdBy User         @relation(fields: [createdById], references: [id])
+  createdById String
+  lines     BudgetLine[]
+  expenses  Expense[]
+  syncRuns  SyncRun[]
+}
+
+model BudgetLine {
+  id          String   @id @default(cuid())
+  budgetId    String
+  budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  category    String
+  description String?
+  plannedCents Int
+  kitsasAccount Int?
+  kind        String   @default("EXPENSE")
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@unique([budgetId, category])
+}
+
+model Expense {
+  id            String   @id @default(cuid())
+  budgetId      String
+  budget        Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  source        String   @default("KITSAS")
+  externalId    String?
+  occurredOn    DateTime @db.Date
+  description   String
+  category      String?
+  amountCents   Int
+  kind          String   @default("EXPENSE")
+  rawPayload    Json?
+  importedAt    DateTime @default(now())
+
+  @@unique([budgetId, source, externalId])
+  @@index([budgetId, occurredOn])
+}
+
+model SyncRun {
+  id          String   @id @default(cuid())
+  budgetId    String
+  budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  source      String
+  status      String
+  imported    Int      @default(0)
+  detail      String?
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+}
