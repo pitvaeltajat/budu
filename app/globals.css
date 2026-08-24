@@ -42,3 +42,16 @@ code { border-radius: 4px; background: var(--muted); padding: 2px 4px; font-size
 button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 @media (max-width: 980px) { .summary { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 760px) { .summary, .grid { grid-template-columns: 1fr; } .topbar { margin-bottom: 28px; }.user { align-items: flex-end; flex-direction: column; gap: 2px; } h1 { font-size: 30px; } }
+.row-open { border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
+.row-open:hover { text-decoration-color: var(--primary); }
+.modal { width: min(760px, calc(100vw - 32px)); max-height: min(860px, calc(100vh - 48px)); border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--foreground); padding: 0; box-shadow: 0 12px 40px rgb(34 30 93 / 22%); }
+.modal::backdrop { background: rgb(34 30 93 / 32%); }
+.modal-body { padding: 24px; overflow-y: auto; max-height: min(860px, calc(100vh - 48px)); }
+.modal-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0 8px; }
+.modal-summary strong { display: block; margin-top: 4px; font-size: 20px; letter-spacing: -.4px; }
+.modal-subhead { margin: 22px 0 4px; color: var(--foreground); font-size: 15px; }
+.chart { margin: 8px 0 0; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart-readout { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 6px; font-size: 13px; color: var(--foreground); }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: baseline; }
+@media (max-width: 620px) { .modal-summary { grid-template-columns: 1fr; } }
