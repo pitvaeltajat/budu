@@ -86,16 +86,17 @@ const bookToken = (await (await fetch(`${hub}/v1/login/${books[0].id}`, { header
 console.log(`Seeding ${vouchers.length} vouchers into "${books[0].name}"…`);
 
 /**
- * Postings on or before the opening-balance date (TilinavausPvm) belong to the
- * opening entry and are rejected by the server, so drop them rather than
- * generating a wall of 500s. A book whose first fiscal year is the prior year
- * is needed for Budu's year-over-year comparison to have anything to show.
+ * A voucher is only postable inside an *opened* fiscal year. `tilikaudet` lists
+ * unopened years too and offers no reliable flag distinguishing them, so rather
+ * than guess, post and let the server rule: a year that is not open rejects
+ * writes with a bare 500. Opening a past fiscal year is a GUI action.
  */
 const cloudLogin = await (await fetch(`${hub}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: process.env.KITSAS_HUB_USERNAME, password: process.env.KITSAS_HUB_PASSWORD, application: 'Budu' }) })).json();
 const cloud = cloudLogin.clouds[0];
 const cloudHeaders = { Authorization: `Bearer ${cloud.token}`, Accept: 'application/json' };
 const init = await (await fetch(`${cloud.url}/init`, { headers: cloudHeaders })).json();
-const openingDate = init.asetukset?.TilinavausPvm;
+const periods = init.tilikaudet || [];
+const inFiscalYear = (date) => periods.some((t) => date >= t.alkaa && date <= t.loppuu);
 const years = [...new Set(vouchers.map((v) => v.date.slice(0, 4)))];
 const existing = new Set();
 for (const year of years) {
@@ -103,16 +104,17 @@ for (const year of years) {
   for (const item of list) existing.add(`${item.pvm}|${item.otsikko}`);
 }
 
-const skippedLocked = vouchers.filter((v) => openingDate && v.date <= openingDate).length;
-const pending = vouchers.filter((v) => (!openingDate || v.date > openingDate) && !existing.has(`${v.date}|${v.title}`));
-if (skippedLocked) console.log(`Skipping ${skippedLocked} voucher(s) on or before the opening date ${openingDate}.`);
+const outside = vouchers.filter((v) => !inFiscalYear(v.date)).length;
+const pending = vouchers.filter((v) => inFiscalYear(v.date) && !existing.has(`${v.date}|${v.title}`));
+if (outside) console.log(`Skipping ${outside} voucher(s) outside any fiscal year.`);
 console.log(`${existing.size} voucher(s) already present; posting ${pending.length}.`);
 
 // Sequential: voucher running numbers are assigned server-side and concurrent
 // posts to the same series are not worth the risk of gaps.
 let done = 0, failed = 0;
 for (const v of pending) {
-  try { await post(bookToken, v); done++; } catch (e) { failed++; console.error(String(e.message)); }
+  try { await post(bookToken, v); done++; }
+  catch (e) { failed++; console.error(`${String(e.message)}${String(e.message).includes(' 500') ? '  (is that fiscal year opened?)' : ''}`); }
   if (done && done % 25 === 0) console.log(`  ${done}/${pending.length}`);
 }
 console.log(`Done: ${done} created, ${failed} failed.`);
