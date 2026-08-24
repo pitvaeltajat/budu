@@ -20,6 +20,9 @@ export type SyncOutcome = {
   budgetId: string;
   mode: SyncMode;
   listed: number;
+  /** Vouchers whose list signature moved. */
+  changed: number;
+  /** Voucher details actually requested from Kitsas, after the shared cache. */
   fetched: number;
   imported: number;
   pruned: number;
@@ -82,7 +85,14 @@ export function syncRanges(startsOn: Date | null, endsOn: Date | null, now: Date
   ];
 }
 
-export async function syncBudget(budgetId: string, mode: SyncMode): Promise<SyncOutcome> {
+/**
+ * Voucher detail shared across budgets in one run. Every budget reads the same
+ * Kitsas book, so fetching a voucher once per budget would multiply the load on
+ * their server by the number of budgets for no new information.
+ */
+export type VoucherCache = Map<number, unknown>;
+
+export async function syncBudget(budgetId: string, mode: SyncMode, cache?: VoucherCache): Promise<SyncOutcome> {
   if (!kitsasIsConfigured()) throw new Error('Kitsas has not been configured.');
   const startedAt = Date.now();
   const budget = await prisma.budget.findUnique({ where: { id: budgetId }, include: { lines: true } });
@@ -115,8 +125,15 @@ export async function syncBudget(budgetId: string, mode: SyncMode): Promise<Sync
     const pending = [...unique.values()].filter((item) => mode === 'full' || known.get(item.id) !== item.signature);
 
     let imported = 0;
-    await mapPool(pending, 6, async (item) => {
-      const voucher = asRecord(await getKitsasVoucher(item.id)) as Voucher | null;
+    let fetchedFromKitsas = 0;
+    await mapPool(pending, 4, async (item) => {
+      let detail = cache?.get(item.id);
+      if (detail === undefined) {
+        detail = await getKitsasVoucher(item.id);
+        fetchedFromKitsas++;
+        cache?.set(item.id, detail);
+      }
+      const voucher = asRecord(detail) as Voucher | null;
       if (!voucher || !Array.isArray(voucher.viennit)) return;
       /**
        * Attachment metadata rides along with the voucher detail we already
@@ -165,11 +182,13 @@ export async function syncBudget(budgetId: string, mode: SyncMode): Promise<Sync
     });
 
     /**
-     * Only a full sync prunes. An incremental run sees one slice of the book and
-     * must never conclude from that alone that a voucher was deleted.
+     * Deletions are visible in the list alone, so pruning costs nothing extra
+     * and happens in both modes. The list covers exactly the ranges this budget
+     * tracks, and those ranges derive from the budget's own period, so a known
+     * voucher missing from it has genuinely gone.
      */
     let pruned = 0;
-    if (mode === 'full') {
+    {
       const live = new Set(unique.keys());
       const stale = [...known.keys()].filter((id) => !live.has(id));
       if (stale.length) {
@@ -187,11 +206,11 @@ export async function syncBudget(budgetId: string, mode: SyncMode): Promise<Sync
       data: {
         status: 'COMPLETED',
         imported,
-        detail: `${mode}: listed ${unique.size}, fetched ${pending.length}, pruned ${pruned}, ${ms}ms`,
+        detail: `${mode}: listed ${unique.size}, changed ${pending.length}, fetched ${fetchedFromKitsas}, pruned ${pruned}, ${ms}ms`,
         completedAt: new Date(),
       },
     });
-    return { budgetId: budget.id, mode, listed: unique.size, fetched: pending.length, imported, pruned, ms };
+    return { budgetId: budget.id, mode, listed: unique.size, changed: pending.length, fetched: fetchedFromKitsas, imported, pruned, ms };
   } catch (error) {
     await prisma.syncRun.update({
       where: { id: sync.id },

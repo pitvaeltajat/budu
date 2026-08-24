@@ -1,4 +1,4 @@
-import { syncBudget, syncableBudgetIds, type SyncMode } from '@/lib/kitsas-sync';
+import { syncBudget, syncableBudgetIds, type SyncMode, type VoucherCache } from '@/lib/kitsas-sync';
 import { kitsasIsConfigured } from '@/lib/kitsas';
 
 /**
@@ -22,10 +22,12 @@ export async function GET(request: Request) {
 
   const mode: SyncMode = new URL(request.url).searchParams.get('mode') === 'full' ? 'full' : 'incremental';
   const budgetIds = await syncableBudgetIds();
+  // One cache for the whole run: every budget reads the same book.
+  const cache: VoucherCache = new Map();
   const results = [];
   for (const budgetId of budgetIds) {
     try {
-      results.push(await syncBudget(budgetId, mode));
+      results.push(await syncBudget(budgetId, mode, cache));
     } catch (error) {
       results.push({ budgetId, mode, error: error instanceof Error ? error.message : 'Unknown error' });
     }

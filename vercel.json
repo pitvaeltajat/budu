@@ -1,7 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
-    { "path": "/api/cron/kitsas?mode=full", "schedule": "30 3 * * *" },
-    { "path": "/api/cron/kitsas?mode=incremental", "schedule": "0 15 * * *" }
+    { "path": "/api/cron/kitsas?mode=incremental", "schedule": "30 3 * * *" }
   ]
 }
