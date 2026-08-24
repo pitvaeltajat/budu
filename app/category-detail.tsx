@@ -81,7 +81,12 @@ export function CategoryDetail(props: CategoryDetailProps) {
       <button type="button" className="row-open" onClick={() => setOpen(true)}>
         {category}
       </button>
-      <dialog ref={dialogRef} className="modal" onClose={() => setOpen(false)}>
+      <dialog
+        ref={dialogRef}
+        className="modal"
+        onClose={() => setOpen(false)}
+        onClick={(event) => { if (event.target === dialogRef.current) setOpen(false); }}
+      >
         {open && (
           <div className="modal-body">
             <div className="section-head">
