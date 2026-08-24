@@ -216,10 +216,14 @@ function Chart({
   const endLabels = (() => {
     const labels = [];
     if (current.length) labels.push({ text: 'Nyt', fill: CURRENT, weight: 650, y: y(totalAt(current, elapsedDays)) + 4, anchor: true });
+    if (plannedCents > 0) labels.push({ text: 'Arvio', fill: 'var(--muted-foreground)', weight: 400, y: y(plannedCents) + 4, anchor: false });
     if (previous.length) labels.push({ text: 'Viime v.', fill: PREVIOUS, weight: 400, y: y(previous.at(-1)!.total) + 4, anchor: false });
-    if (labels.length === 2 && Math.abs(labels[0].y - labels[1].y) < 14) {
-      const other = labels[1];
-      other.y = other.y >= labels[0].y ? labels[0].y + 14 : labels[0].y - 14;
+    /** Keep the current year where it is and push everything else clear of it. */
+    for (let i = 1; i < labels.length; i++) {
+      for (let j = 0; j < i; j++) {
+        if (Math.abs(labels[i].y - labels[j].y) >= 14) continue;
+        labels[i].y = labels[i].y >= labels[j].y ? labels[j].y + 14 : labels[j].y - 14;
+      }
     }
     return labels.map((label) => ({ ...label, y: Math.max(pad.top + 8, Math.min(pad.top + plotHeight, label.y)) }));
   })();
@@ -250,7 +254,6 @@ function Chart({
         {plannedCents > 0 && (
           <>
             <line x1={pad.left} y1={y(plannedCents)} x2={pad.left + plotWidth} y2={y(plannedCents)} stroke="var(--muted-foreground)" strokeWidth="2" strokeDasharray="2 5" strokeLinecap="round" />
-            <text x={pad.left + plotWidth + 8} y={y(plannedCents) + 4} fontSize="12" fill="var(--muted-foreground)">Arvio</text>
           </>
         )}
         {previous.length > 0 && <path d={path(previous, totalDays)} fill="none" stroke={PREVIOUS} strokeWidth="2" strokeLinejoin="round" />}

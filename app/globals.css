@@ -47,13 +47,14 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .modal { width: min(988px, calc(100vw - 32px)); max-height: min(1118px, calc(100vh - 48px)); border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--foreground); padding: 0; box-shadow: 0 12px 40px rgb(34 30 93 / 22%); }
 .modal::backdrop { background: rgb(34 30 93 / 32%); }
 .modal-body { padding: 30px; overflow-y: auto; max-height: min(1118px, calc(100vh - 48px)); }
-.modal-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0 8px; }
-.modal-summary strong { display: block; margin-top: 4px; font-size: 20px; letter-spacing: -.4px; }
+.modal-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0 8px; }
+.modal-summary strong { display: block; margin-top: 4px; font-size: 19px; letter-spacing: -.4px; }
 .modal-subhead { margin: 22px 0 4px; color: var(--foreground); font-size: 15px; }
 .chart { margin: 8px 0 0; }
 .chart svg { display: block; width: 100%; height: auto; }
 .chart-readout { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 6px; font-size: 13px; color: var(--foreground); }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: baseline; }
-@media (max-width: 620px) { .modal-summary { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .modal-summary { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .modal-summary { grid-template-columns: 1fr; } }
 .modal tr.is-active td { background: color-mix(in srgb, var(--cta) 45%, var(--card)); }
 .modal tr.is-active td:first-child { box-shadow: inset 3px 0 0 #0d54d9; }
