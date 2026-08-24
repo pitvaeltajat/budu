@@ -2,6 +2,7 @@ export type BudgetImportLine = {
   category: string;
   plannedCents: number;
   description?: string;
+  groupName?: string;
   kitsasAccount?: number;
   kind: 'INCOME' | 'EXPENSE';
 };
@@ -69,6 +70,7 @@ function parseSimpleBudget(records: RecordRow[], submittedName: string): ParsedB
       category: text(fields.category),
       plannedCents: euroCents(fields.planned),
       description: text(fields.description) || undefined,
+      groupName: text(fields.group || fields.ryhma || fields.otsikko) || undefined,
       kitsasAccount: account ? Number(account) : undefined,
       kind: rowKind(fields.kind || fields.type || fields.tulo_meno, account ? Number(account) : undefined),
     };
@@ -89,14 +91,27 @@ function parseTalousarvio(rows: unknown[][], submittedName: string): ParsedBudge
   const selected = years.at(-1);
   if (!selected) throw new Error('Could not find a budget-year column.');
   const lines: BudgetImportLine[] = [];
+  let groupName: string | undefined;
   for (const row of rows) {
     const account = Number(text(row[1])); const description = text(row[2]); const planned = text(row[selected.index]);
+    /**
+     * Section headings sit alone in the first column with no account and no
+     * figures. Summary rows such as "Kulujäämä" and "Tilikauden tulos" also sit
+     * there, so require the row to be free of amounts before treating it as a
+     * heading, otherwise every subtotal would rename the section below it.
+     */
+    const heading = text(row[0]);
+    const hasFigures = row.some((cell, column) => column > 2 && /\d/.test(text(cell)) && Number.isFinite(euroCents(cell)));
+    if (heading && !text(row[1]) && !hasFigures) {
+      groupName = heading;
+      continue;
+    }
     if (!Number.isInteger(account) || !description) continue;
     // Empty plan cells in this particular budget mean no allocation, rather
     // than an invalid row. Keep them so every Kitsas account remains mapped.
     const plannedCents = planned ? euroCents(planned) : 0;
     if (!Number.isFinite(plannedCents)) throw new Error(`Invalid ${selected.year} amount for account ${account}.`);
-    lines.push({ category: `${account} — ${description}`, description, kitsasAccount: account, plannedCents, kind: rowKind(undefined, account) });
+    lines.push({ category: `${account} — ${description}`, description, groupName, kitsasAccount: account, plannedCents, kind: rowKind(undefined, account) });
   }
   if (!lines.length) throw new Error('No account rows were found in the Talousarvio file.');
   return {

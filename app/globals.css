@@ -58,3 +58,5 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 @media (max-width: 520px) { .modal-summary { grid-template-columns: 1fr; } }
 .modal tr.is-active td { background: color-mix(in srgb, var(--cta) 45%, var(--card)); }
 .modal tr.is-active td:first-child { box-shadow: inset 3px 0 0 #0d54d9; }
+.group-row th { padding: 20px 6px 6px; border-bottom: 1px solid var(--border); color: var(--primary); font-size: 12px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.group-row:first-child th { padding-top: 6px; }

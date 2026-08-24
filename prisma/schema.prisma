@@ -38,6 +38,8 @@ model BudgetLine {
   budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   category    String
   description String?
+  /// Section heading the row sat under in the imported budget, e.g. "Kone- ja kalustokulut".
+  groupName   String?
   plannedCents Int
   kitsasAccount Int?
   kind        String   @default("EXPENSE")
