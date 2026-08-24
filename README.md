@@ -70,6 +70,18 @@ Amounts arriving as strings is why `asNumber` in the sync route parses rather th
 
 Note that voucher detail is an N+1 fetch: one request per voucher in the range. That is fine for an association's books and would need batching for a larger one.
 
+### Scheduled sync
+
+`vercel.json` runs two crons, both daily because Hobby plans reject anything more frequent at deploy time: a full sync at 03:30 and an incremental pass at 15:00. Both hit `GET /api/cron/kitsas`, which requires `Authorization: Bearer $CRON_SECRET` and refuses to run at all when `CRON_SECRET` is unset, rather than quietly running unauthenticated against an external service.
+
+Rotating `CRON_SECRET` requires a **fresh build**, not `vercel redeploy`. Vercel sends the project's current value when it triggers a cron, but the function compares against the value snapshotted into its deployment at build time, and `redeploy` reuses that snapshot. Change the secret without rebuilding and every cron run fails with `Unauthorized` while the variable looks correct in the dashboard.
+
+The incremental pass diffs the cheap list endpoint against `KitsasVoucherState` and fetches detail only for vouchers whose total, date, or title moved. An edit that leaves all three untouched is invisible to it, which is what the full sync is for. Only the full sync prunes deleted vouchers: an incremental run sees one slice of the book and cannot conclude from that alone that a voucher is gone.
+
+### Attachments
+
+Invoice files are retrievable but cannot be linked to directly. Voucher detail carries `liitteet` as `[{id, nimi, tyyppi}]`, `GET /liitteet?alkupvm=…&loppupvm=…` lists them, and `GET /liitteet/{id}` returns the bytes as `image/jpeg`, `image/png`, `application/pdf`, or `text/csv`. That request needs the cloud bearer token and answers 403 without it, so surfacing a file to a browser means proxying it through an authenticated route; putting the token in the page would hand every viewer write access to the books.
+
 ### Test server
 
 Kitsas runs a test server at `https://test-api.kitsas.fi` (Swagger at `https://test-api.kitsas.fi/api`; the machine-readable spec is at `/api-json`, since the `/api` page itself is a single-page app). A test account can be created there freely, but data retention is not guaranteed. Set `KITSAS_HUB_URL="https://test-api.kitsas.fi"` to point discovery at it — `.env.example` defaults to the test server. The Kitsas desktop client connects to the same server with `--api https://test-api.kitsas.fi`; on macOS the bundle hides the CLI, so run `/Applications/Kitsas.app/Contents/MacOS/Kitsas --api …` or `open -n -a Kitsas --args --api …`.
