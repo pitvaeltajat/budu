@@ -39,7 +39,8 @@ const incomeAccount = (account: number) => (
   (account >= 5000 && account < 5100) ||
   (account >= 6000 && account < 6100) ||
   (account >= 7000 && account < 7100) ||
-  (account >= 7500 && account < 7600)
+  (account >= 7500 && account < 7600) ||
+  account === 8825
 );
 
 function rowKind(value: unknown, account?: number): 'INCOME' | 'EXPENSE' {

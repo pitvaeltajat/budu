@@ -24,9 +24,10 @@ test('Talousarvio uses income account ranges beyond 3000', async () => {
     ['', '3500', 'Kammin vuokratuotot', '', '4000'],
     ['', '5010', 'Pukkipalvelun tuotot', '', '350'],
     ['', '7510', 'Kaupungin avustukset', '', '4600'],
+    ['', '8825', 'Lahjoitukset', '', '100'],
     ['', '4210', 'Retkikulut', '', '4000'],
   ]);
-  assert.deepEqual(result.lines.map(({ kind }) => kind), ['INCOME', 'INCOME', 'INCOME', 'EXPENSE']);
+  assert.deepEqual(result.lines.map(({ kind }) => kind), ['INCOME', 'INCOME', 'INCOME', 'INCOME', 'EXPENSE']);
 });
 
 test('simple imports allow a per-row kind override', async () => {
