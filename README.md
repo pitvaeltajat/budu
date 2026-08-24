@@ -28,7 +28,7 @@ For the simple format, use these headers:
 
 Importing a file creates a new budget; it does not discard prior local budgets or expenses.
 
-For the Talousarvio layout, Budu identifies the rightmost year (for example `2026`), reads account rows from `tilinumero`/column B, and treats that account number as the Kitsas match key. Rows with an empty budget amount are imported as €0, so matching remains complete.
+For the Talousarvio layout, Budu identifies the rightmost year (for example `2026`), reads account rows from `tilinumero`/column B, and treats that account number as the Kitsas match key. Headings in the sheet are ignored: section names and their order are fixed in `lib/budget-sections.ts`, keyed by account-number range, because the association's budget has a settled shape and the account number is the single source of truth. An account outside every stated range is kept and shown under "Muut erät" rather than dropped. `pnpm test:sections` checks the ranges do not overlap and that known accounts land where the budget expects. Rows with an empty budget amount are imported as €0, so matching remains complete.
 
 ## Kitsas safety contract
 
