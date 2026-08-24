@@ -3,7 +3,6 @@ import { prisma } from '@/lib/prisma';
 import { kitsasIsConfigured } from '@/lib/kitsas';
 import { redirect } from 'next/navigation';
 import type { Prisma } from '@prisma/client';
-import Link from 'next/link';
 
 const money = (cents: number, currency = 'EUR') => new Intl.NumberFormat('fi-FI', { style: 'currency', currency }).format(cents / 100);
 const date = (value: Date) => new Intl.DateTimeFormat('fi-FI').format(value);
@@ -12,7 +11,7 @@ export default async function Home() {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
   const budget = await prisma.budget.findFirst({ where: { createdById: session.user.id }, orderBy: { updatedAt: 'desc' }, include: { lines: { orderBy: { sortOrder: 'asc' } }, expenses: { orderBy: { occurredOn: 'desc' } } } });
-  return <main className="shell"><header className="topbar"><Link className="brand" href="/">bu<span>du</span></Link><div className="user"><span>{session.user.email}</span><form action={async () => { 'use server'; await signOut({ redirectTo: '/login' }); }}><button className="link-button">Sign out</button></form></div></header>{budget ? <Dashboard budget={budget} configured={kitsasIsConfigured()} /> : <Setup />}</main>;
+  return <main className="shell"><header className="topbar"><div className="user"><span>{session.user.email}</span><form action={async () => { 'use server'; await signOut({ redirectTo: '/login' }); }}><button className="link-button">Sign out</button></form></div></header>{budget ? <Dashboard budget={budget} configured={kitsasIsConfigured()} /> : <Setup />}</main>;
 }
 
 function Setup() { return <section className="setup"><p className="eyebrow">Start here</p><h1>Bring in your first budget.</h1><p className="lede">Upload the budget workbook or CSV when it is ready. Budu will store the plan separately from the read-only realized-expense feed.</p><div className="card"><h2>Expected columns</h2><ul><li><code>category</code> — a unique budget category</li><li><code>planned</code> — amount in euros (for example <code>1250.50</code>)</li><li>Optional: <code>account</code> (Kitsas expense account), <code>description</code>, <code>budget_name</code>, <code>currency</code></li></ul><a className="button" href="/import">Import a budget</a></div></section>; }
