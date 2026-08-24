@@ -1,39 +1,61 @@
+import { getKitsasCloud, kitsasCloudIsConfigured } from './kitsas-cloud';
+
 /**
  * Strictly read-only Kitsas client. There are deliberately no POST, PUT, PATCH,
- * or DELETE methods in this module. Configure the exact vouchers endpoint only
- * after validating its shape against a non-production organization.
+ * or DELETE methods in this module. The cloud URL and token are resolved by
+ * `kitsas-cloud.ts`, which holds the integration's only POST — a login, not a
+ * data mutation.
+ *
+ * These endpoints live on the legacy per-book cloud backend, not on KitsasHub:
+ * the documented Hub API exposes no voucher read.
  */
-const baseUrl = process.env.KITSAS_API_URL?.replace(/\/$/, '') || 'https://api.kitsas.fi/api';
+type Cloud = { url: string; token: string };
+
+/** Kitsas expects `Bearer <jwt>`; tolerate a token that already carries a scheme. */
+function authorization(token: string) {
+  return /^(bearer|basic) /i.test(token) ? token : `Bearer ${token}`;
+}
+
+function expensesPath() {
+  const path = process.env.KITSAS_EXPENSES_PATH;
+  if (!path) throw new Error('KITSAS_EXPENSES_PATH must be set.');
+  if (!path.startsWith('/')) throw new Error('KITSAS_EXPENSES_PATH must start with /.');
+  return path;
+}
+
+async function readCloud(cloud: Cloud, path: string, params?: Record<string, string>): Promise<unknown> {
+  const url = new URL(`${cloud.url}${path}`);
+  for (const [key, value] of Object.entries(params ?? {})) url.searchParams.set(key, value);
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { Authorization: authorization(cloud.token), Accept: 'application/json' },
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error(`Kitsas request to ${path} failed (${response.status}).`);
+  return response.json();
+}
 
 export function kitsasIsConfigured() {
-  return Boolean(process.env.KITSAS_TOKEN && process.env.KITSAS_EXPENSES_PATH);
+  return Boolean(process.env.KITSAS_EXPENSES_PATH) && kitsasCloudIsConfigured();
+}
+
+/**
+ * `GET /init` is the cloud backend's own description of the book. Kitsas support
+ * recommends it as the first call against a book, so it doubles as the
+ * connectivity check for a configured cloud.
+ */
+export async function getKitsasInit(): Promise<unknown> {
+  if (!kitsasCloudIsConfigured()) throw new Error('Kitsas is not configured.');
+  return readCloud(await getKitsasCloud(), '/init');
 }
 
 export async function getKitsasExpenses(from: string, to: string): Promise<unknown> {
   if (!kitsasIsConfigured()) throw new Error('Kitsas is not configured.');
-  const path = process.env.KITSAS_EXPENSES_PATH!;
-  if (!path.startsWith('/')) throw new Error('KITSAS_EXPENSES_PATH must start with /.');
-  const url = new URL(`${baseUrl}${path}`);
-  url.searchParams.set('alkupvm', from);
-  url.searchParams.set('loppupvm', to);
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: { Authorization: process.env.KITSAS_TOKEN!, Accept: 'application/json' },
-    cache: 'no-store',
-  });
-  if (!response.ok) throw new Error(`Kitsas request failed (${response.status}).`);
-  return response.json();
+  return readCloud(await getKitsasCloud(), expensesPath(), { alkupvm: from, loppupvm: to });
 }
 
 export async function getKitsasVoucher(id: number): Promise<unknown> {
   if (!kitsasIsConfigured()) throw new Error('Kitsas is not configured.');
   if (!Number.isSafeInteger(id) || id < 1) throw new Error('Invalid Kitsas voucher id.');
-  const path = process.env.KITSAS_EXPENSES_PATH!;
-  const response = await fetch(`${baseUrl}${path}/${id}`, {
-    method: 'GET',
-    headers: { Authorization: process.env.KITSAS_TOKEN!, Accept: 'application/json' },
-    cache: 'no-store',
-  });
-  if (!response.ok) throw new Error(`Kitsas voucher request failed (${response.status}).`);
-  return response.json();
+  return readCloud(await getKitsasCloud(), `${expensesPath()}/${id}`);
 }

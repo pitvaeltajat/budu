@@ -10,13 +10,28 @@ export type KitsasHubCredentials = {
   username: string;
   password: string;
   bookId?: string;
+  /** Hub host. Set to https://test-api.kitsas.fi to develop against the test server. */
+  url?: string;
   mock?: boolean;
 };
 
 export type KitsasAccount = { number: string; name: string };
 
+export const KITSAS_HUB_PRODUCTION_URL = 'https://api.kitsas.fi';
+export const KITSAS_HUB_TEST_URL = 'https://test-api.kitsas.fi';
+
+/**
+ * The Hub host, defaulting to production. `kitsas-library` would otherwise fall
+ * back to its own `KITSAS_URL` lookup, so resolve it here to keep the host an
+ * explicit, inspectable choice.
+ */
+export function kitsasHubUrl() {
+  return (process.env.KITSAS_HUB_URL || process.env.KITSAS_URL || KITSAS_HUB_PRODUCTION_URL).replace(/\/$/, '');
+}
+
 export async function discoverKitsasHub(credentials: KitsasHubCredentials) {
-  const connection = await KitsasService.connect(credentials);
+  const url = credentials.url?.replace(/\/$/, '') || kitsasHubUrl();
+  const connection = await KitsasService.connect({ ...credentials, url });
   const books = await connection.getBooks();
   const selectedBookId = credentials.bookId || books[0]?.id;
   if (!selectedBookId) throw new Error('The Kitsas user has no accessible books.');
@@ -27,6 +42,7 @@ export async function discoverKitsasHub(credentials: KitsasHubCredentials) {
     book.getFiscalYears(),
   ]);
   return {
+    hubUrl: url,
     userName: connection.getName(),
     books: books.map((item) => ({ id: item.id, name: item.name })),
     selectedBookId,

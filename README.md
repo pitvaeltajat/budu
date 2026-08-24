@@ -32,16 +32,53 @@ For the Talousarvio layout, Budu identifies the rightmost year (for example `202
 
 ## Kitsas safety contract
 
-The integration makes only `GET` requests to the legacy documented voucher endpoints:
+The integration makes only `GET` requests to the legacy voucher endpoints:
 
 - `GET /tositteet?alkupvm=…&loppupvm=…`
 - `GET /tositteet/{id}`
 
-It has no methods capable of posting, editing, or deleting anything in Kitsas. Budu stores its own copy of matched debit entries in PostgreSQL. Set `KITSAS_API_URL` to the specific cloud URL, `KITSAS_TOKEN`, and `KITSAS_EXPENSES_PATH=/tositteet` only after validating the credentials with a non-production book.
+It has no methods capable of posting, editing, or deleting anything in Kitsas. Budu stores its own copy of matched debit entries in PostgreSQL.
 
-The newer [`kitsas-library`](https://github.com/Kitsas-Oy/kitsaslibrary) is a useful official client for Hub login and book/account discovery. Its documented book interface does not expose voucher retrieval, so Budu uses the documented read-only voucher API for realized-expense ingestion.
+Kitsas exposes two hosts, and they are not interchangeable:
 
-`GET /api/kitsas/discover` uses the official Hub client to read the available books, accounts, dimensions, and fiscal years. Set the `KITSAS_HUB_*` variables to use it. The mock connection is covered by `pnpm test:kitsas-mock` and uses no network or real Kitsas data.
+| Host | Variables | Serves |
+| --- | --- | --- |
+| KitsasHub (`api.kitsas.fi`, test `test-api.kitsas.fi`) | `KITSAS_HUB_*` | Login, books, accounts, dimensions, fiscal years |
+| Legacy per-book cloud backend | resolved at runtime; `KITSAS_CLOUD_ID`, `KITSAS_EXPENSES_PATH` | `GET /init`, `GET /tositteet`, `GET /tositteet/{id}` |
+
+The documented Hub API has no voucher read endpoint — only `POST /v1/vouchers`, which Budu never calls. Realized-expense ingestion therefore uses the legacy cloud backend, which Kitsas confirmed is alive and usable.
+
+The cloud URL and token are **not** configured by hand. `lib/kitsas-cloud.ts` resolves them at runtime: `POST {hub}/login` with `KITSAS_HUB_USERNAME`/`KITSAS_HUB_PASSWORD` returns `clouds[]`, each entry carrying `id` (the cloudid), `url`, and `token`. `KITSAS_CLOUD_ID` selects a specific book when the user has several; otherwise the first active cloud wins. The resolved token is cached in memory for ten minutes, since the compatibility login response documents no lifetime.
+
+That login is the integration's only non-`GET` request, and it is authentication rather than a data mutation. Everything touching bookkeeping data lives in `lib/kitsas.ts` and is `GET`-only. Tokens are sent as `Bearer <token>`; a value already carrying a scheme passes through unchanged.
+
+`KITSAS_API_URL` and `KITSAS_TOKEN` remain as an optional manual override that skips the login, for when the cloud URL is already known.
+
+### Verified voucher shape
+
+Confirmed against a test book on 2026-08-24. `GET /tositteet?alkupvm=…&loppupvm=…` returns list items of `{id, pvm, tyyppi, tila, tunniste, otsikko, summa}`; the per-entry account breakdown requires `GET /tositteet/{id}`, whose `viennit[]` entries carry:
+
+| Field | Type | Note |
+| --- | --- | --- |
+| `id` | number | Unique per book, not per voucher; Budu keys on `{voucherId}:{entryId}` anyway |
+| `tili` | number | Account number |
+| `debet` / `kredit` | decimal **string** | Only one of the two is present; the other is absent, not zero |
+| `pvm` | `YYYY-MM-DD` string | Per entry, falling back to the voucher's `pvm` |
+| `selite` | string | Entry description |
+
+Amounts arriving as strings is why `asNumber` in the sync route parses rather than casts. A debit-side entry has no `kredit` key at all, so the unused side is `NaN` and the entry is skipped — that is what keeps the bank contra entry out of the totals.
+
+Note that voucher detail is an N+1 fetch: one request per voucher in the range. That is fine for an association's books and would need batching for a larger one.
+
+### Test server
+
+Kitsas runs a test server at `https://test-api.kitsas.fi` (Swagger at `https://test-api.kitsas.fi/api`; the machine-readable spec is at `/api-json`, since the `/api` page itself is a single-page app). A test account can be created there freely, but data retention is not guaranteed. Set `KITSAS_HUB_URL="https://test-api.kitsas.fi"` to point discovery at it — `.env.example` defaults to the test server. The Kitsas desktop client connects to the same server with `--api https://test-api.kitsas.fi`; on macOS the bundle hides the CLI, so run `/Applications/Kitsas.app/Contents/MacOS/Kitsas --api …` or `open -n -a Kitsas --args --api …`.
+
+The cloud backend the test Hub hands back lives on a *third* host — `test-app.kitsas.fi/cloud/{cloudid}` — which is why the cloud URL must be read from `clouds[]` and cannot be derived from the Hub host.
+
+Creating a book through `POST /v1/books` allocates the cloud but does **not** provision its database schema: `/init` and `/tositteet` then fail with `relation "k{cloudid}.asetus" does not exist`. Initialize a new book from the desktop client instead.
+
+`GET /api/kitsas/discover` uses the official Hub client to read the available books, accounts, dimensions, and fiscal years. Set the `KITSAS_HUB_*` variables to use it. Its response also carries a `cloud` block — the resolved cloudid, name, URL, and whether `GET /init` on that cloud answered — so a broken cloud configuration is visible without running a sync. The mock connection is covered by `pnpm test:kitsas-mock` and uses no network or real Kitsas data.
 
 Kitsas sync fetches the current budget period through today and the equivalent date range one year earlier. The dashboard compares each mapped account's budget, current-period realization, and same-period-prior-year realization. Expense lines use debit entries; income lines (3000–3999) use credit entries.
 
