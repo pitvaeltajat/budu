@@ -60,3 +60,10 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .modal tr.is-active td:first-child { box-shadow: inset 3px 0 0 #0d54d9; }
 .group-row th { padding: 20px 6px 6px; border-bottom: 1px solid var(--border); color: var(--primary); font-size: 12px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .group-row:first-child th { padding-top: 6px; }
+@keyframes budu-pulse { 0%, 100% { opacity: .45; } 50% { opacity: .85; } }
+.skeleton { display: inline-block; width: 58px; height: 12px; border-radius: 3px; background: var(--muted); animation: budu-pulse 1.4s ease-in-out infinite; vertical-align: middle; }
+.skeleton-wide { width: 116px; height: 20px; }
+.spinner { display: inline-block; width: 12px; height: 12px; margin-right: 8px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: budu-spin .8s linear infinite; vertical-align: -1px; }
+@keyframes budu-spin { to { transform: rotate(360deg); } }
+.pending-note { display: flex; align-items: center; }
+@media (prefers-reduced-motion: reduce) { .skeleton, .spinner { animation: none; } }
