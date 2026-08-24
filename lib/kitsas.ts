@@ -54,6 +54,25 @@ export async function getKitsasExpenses(from: string, to: string): Promise<unkno
   return readCloud(await getKitsasCloud(), expensesPath(), { alkupvm: from, loppupvm: to });
 }
 
+export type KitsasAttachment = { body: ArrayBuffer; contentType: string };
+
+/**
+ * Streams one attachment's bytes. The endpoint negotiates on Accept and rejects
+ * `application/json` outright, so ask for the types it actually serves.
+ */
+export async function getKitsasAttachment(id: number): Promise<KitsasAttachment> {
+  if (!kitsasCloudIsConfigured()) throw new Error('Kitsas is not configured.');
+  if (!Number.isSafeInteger(id) || id < 1) throw new Error('Invalid Kitsas attachment id.');
+  const cloud = await getKitsasCloud();
+  const response = await fetch(`${cloud.url}/liitteet/${id}`, {
+    method: 'GET',
+    headers: { Authorization: authorization(cloud.token), Accept: 'image/jpeg, image/png, application/pdf, text/csv' },
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error(`Kitsas attachment request failed (${response.status}).`);
+  return { body: await response.arrayBuffer(), contentType: response.headers.get('content-type') || 'application/octet-stream' };
+}
+
 export async function getKitsasVoucher(id: number): Promise<unknown> {
   if (!kitsasIsConfigured()) throw new Error('Kitsas is not configured.');
   if (!Number.isSafeInteger(id) || id < 1) throw new Error('Invalid Kitsas voucher id.');

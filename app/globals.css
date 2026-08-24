@@ -67,3 +67,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 @keyframes budu-spin { to { transform: rotate(360deg); } }
 .pending-note { display: flex; align-items: center; }
 @media (prefers-reduced-motion: reduce) { .skeleton, .spinner { animation: none; } }
+.attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.attachment { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--card); padding: 2px 8px; color: var(--foreground); font-size: 11px; font-weight: 650; text-decoration: none; }
+.attachment:hover { background: var(--muted); }
+.attachment-name { max-width: 190px; overflow: hidden; color: var(--muted-foreground); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }

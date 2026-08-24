@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getKitsasExpenses, getKitsasVoucher, kitsasIsConfigured } from '@/lib/kitsas';
 
@@ -27,7 +28,8 @@ export type SyncOutcome = {
 
 type VoucherListItem = { id?: unknown; pvm?: unknown; otsikko?: unknown; summa?: unknown };
 type VoucherEntry = { id?: unknown; pvm?: unknown; tili?: unknown; selite?: unknown; debet?: unknown; kredit?: unknown };
-type Voucher = { id?: unknown; pvm?: unknown; otsikko?: unknown; viennit?: unknown };
+type Voucher = { id?: unknown; pvm?: unknown; otsikko?: unknown; viennit?: unknown; liitteet?: unknown };
+export type StoredAttachment = { id: number; name: string; type: string };
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -116,6 +118,17 @@ export async function syncBudget(budgetId: string, mode: SyncMode): Promise<Sync
     await mapPool(pending, 6, async (item) => {
       const voucher = asRecord(await getKitsasVoucher(item.id)) as Voucher | null;
       if (!voucher || !Array.isArray(voucher.viennit)) return;
+      /**
+       * Attachment metadata rides along with the voucher detail we already
+       * fetch. The bytes stay in Kitsas; only the reference is stored, and it
+       * is served through an authenticated route because the endpoint answers
+       * 403 without the cloud token.
+       */
+      const attachments: StoredAttachment[] = (Array.isArray(voucher.liitteet) ? voucher.liitteet : [])
+        .map((raw) => asRecord(raw))
+        .filter((file): file is Record<string, unknown> => Boolean(file))
+        .map((file) => ({ id: asNumber(file.id), name: asText(file.nimi), type: asText(file.tyyppi) }))
+        .filter((file) => Number.isSafeInteger(file.id) && file.id > 0);
       for (const rawEntry of voucher.viennit) {
         const entry = asRecord(rawEntry) as VoucherEntry | null;
         if (!entry) continue;
@@ -133,6 +146,9 @@ export async function syncBudget(budgetId: string, mode: SyncMode): Promise<Sync
           category: line.category,
           kind: line.kind,
           amountCents: Math.round(amount * 100),
+          // Explicit null, not undefined: an attachment removed in Kitsas has to
+          // clear the stored reference rather than leave the old one standing.
+          rawPayload: attachments.length ? { attachments } : Prisma.DbNull,
         };
         await prisma.expense.upsert({
           where: { budgetId_source_externalId: { budgetId: budget.id, source: 'KITSAS', externalId: `${item.id}:${entryId}` } },

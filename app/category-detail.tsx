@@ -11,7 +11,8 @@ import { useEffect, useRef, useState } from 'react';
 const CURRENT = '#0d54d9';
 const PREVIOUS = '#757f92';
 
-export type CategoryItem = { id: string; date: string; description: string; amountCents: number };
+export type CategoryAttachment = { id: number; name: string; type: string };
+export type CategoryItem = { id: string; date: string; description: string; amountCents: number; attachments?: CategoryAttachment[] };
 
 export type CategoryDetailProps = {
   category: string;
@@ -135,6 +136,16 @@ export function CategoryDetail(props: CategoryDetailProps) {
                         <strong>{item.description}</strong>
                         <br />
                         <span className="label">{fullDate(item.date)}</span>
+                        {item.attachments?.length ? (
+                          <span className="attachments">
+                            {item.attachments.map((file) => (
+                              <a key={file.id} href={`/api/kitsas/attachment/${file.id}`} target="_blank" rel="noreferrer" className="attachment">
+                                {file.type === 'application/pdf' ? 'PDF' : file.type.startsWith('image/') ? 'Kuva' : 'Liite'}
+                                <span className="attachment-name">{file.name}</span>
+                              </a>
+                            ))}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="right">{moneyExact(item.amountCents, currency)}</td>
                     </tr>
