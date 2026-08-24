@@ -29,6 +29,7 @@ model Budget {
   lines     BudgetLine[]
   expenses  Expense[]
   syncRuns  SyncRun[]
+  voucherStates KitsasVoucherState[]
 }
 
 model BudgetLine {
@@ -74,4 +75,18 @@ model SyncRun {
   detail      String?
   startedAt   DateTime @default(now())
   completedAt DateTime?
+}
+
+/// One row per Kitsas voucher seen by a sync, mapped to a budget line or not.
+/// The signature lets an incremental sync skip unchanged vouchers: Kitsas has no
+/// modified-since filter, so the cheap list endpoint is diffed against this
+/// instead of re-fetching every voucher's detail on each run.
+model KitsasVoucherState {
+  budgetId  String
+  budget    Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  voucherId Int
+  signature String
+  syncedAt  DateTime @updatedAt
+
+  @@id([budgetId, voucherId])
 }
