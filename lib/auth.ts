@@ -3,7 +3,9 @@ import Google from 'next-auth/providers/google';
 import { prisma } from '@/lib/prisma';
 
 declare module 'next-auth' {
-  interface Session { user: { id: string } & DefaultSession['user'] }
+  interface Session {
+    user: { id: string } & DefaultSession['user'];
+  }
 }
 /**
  * Allowed Google Workspace domains, comma-separated. Enforcement is on the
@@ -12,28 +14,32 @@ declare module 'next-auth' {
  * alias address can carry a domain that differs from the account's own.
  * An account with no `hd` (any consumer Gmail) is rejected outright.
  */
-const domains = (process.env.GOOGLE_WORKSPACE_DOMAIN ?? '')
+export const allowedDomains = (process.env.GOOGLE_WORKSPACE_DOMAIN ?? '')
   .split(',')
   .map((entry) => entry.trim().toLowerCase())
   .filter(Boolean);
 
 /** The `hd` request param only narrows Google's account chooser; it is a hint, not a control. */
-const hdHint = domains.length === 1 ? domains[0] : domains.length > 1 ? '*' : undefined;
+const hdHint = allowedDomains.length === 1 ? allowedDomains[0] : allowedDomains.length > 1 ? '*' : undefined;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  providers: [Google({
-    clientId: process.env.GOOGLE_CLIENT_ID ?? process.env.AUTH_GOOGLE_ID ?? '',
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? process.env.AUTH_GOOGLE_SECRET ?? '',
-    authorization: hdHint ? { params: { hd: hdHint } } : undefined,
-  })],
+  /** A rejected sign-in lands back on the login page, which explains the domain rule in Finnish. */
+  pages: { signIn: '/login', error: '/login' },
+  providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? process.env.AUTH_GOOGLE_ID ?? '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? process.env.AUTH_GOOGLE_SECRET ?? '',
+      authorization: hdHint ? { params: { hd: hdHint } } : undefined,
+    }),
+  ],
   callbacks: {
     async signIn({ user, account, profile }) {
       if (account?.provider !== 'google' || !user.email) return false;
       const email = user.email.toLowerCase();
       if (profile && profile.email_verified === false) return false;
-      if (domains.length) {
+      if (allowedDomains.length) {
         const hd = typeof profile?.hd === 'string' ? profile.hd.trim().toLowerCase() : null;
-        if (!hd || !domains.includes(hd)) return false;
+        if (!hd || !allowedDomains.includes(hd)) return false;
       }
       await prisma.user.upsert({
         where: { email },
