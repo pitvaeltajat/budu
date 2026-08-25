@@ -9,7 +9,12 @@ export async function GET() {
     where: { createdById: session.user.id },
     orderBy: { updatedAt: 'desc' },
     select: {
-      id: true, name: true, startsOn: true, endsOn: true, createdAt: true, updatedAt: true,
+      id: true,
+      name: true,
+      startsOn: true,
+      endsOn: true,
+      createdAt: true,
+      updatedAt: true,
       _count: { select: { lines: true, expenses: true } },
     },
   });

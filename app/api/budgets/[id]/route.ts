@@ -9,7 +9,10 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: 'Kirjautuminen vaaditaan.' }, { status: 401 });
   const { id } = await context.params;
-  const budget = await prisma.budget.findFirst({ where: { id, createdById: session.user.id }, select: { id: true, name: true } });
+  const budget = await prisma.budget.findFirst({
+    where: { id, createdById: session.user.id },
+    select: { id: true, name: true },
+  });
   if (!budget) return Response.json({ error: 'Talousarviota ei löytynyt.' }, { status: 404 });
   const remaining = await prisma.budget.count({ where: { createdById: session.user.id } });
   if (remaining <= 1) return Response.json({ error: 'Viimeistä talousarviota ei voi poistaa.' }, { status: 409 });

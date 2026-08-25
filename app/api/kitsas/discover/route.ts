@@ -9,12 +9,21 @@ export async function GET() {
   if (!session?.user?.id) return Response.json({ error: 'Sign in required.' }, { status: 401 });
   const username = process.env.KITSAS_HUB_USERNAME;
   const password = process.env.KITSAS_HUB_PASSWORD;
-  if (!username || !password) return Response.json({ error: 'KitsasHub credentials are not configured.' }, { status: 409 });
+  if (!username || !password)
+    return Response.json({ error: 'KitsasHub credentials are not configured.' }, { status: 409 });
   try {
-    const hub = await discoverKitsasHub({ username, password, bookId: process.env.KITSAS_HUB_BOOK_ID, url: process.env.KITSAS_HUB_URL });
+    const hub = await discoverKitsasHub({
+      username,
+      password,
+      bookId: process.env.KITSAS_HUB_BOOK_ID,
+      url: process.env.KITSAS_HUB_URL,
+    });
     return Response.json({ ...hub, cloud: await describeCloud() });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : 'KitsasHub discovery failed.' }, { status: 502 });
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'KitsasHub discovery failed.' },
+      { status: 502 },
+    );
   }
 }
 
@@ -27,7 +36,9 @@ async function describeCloud() {
   if (!kitsasCloudIsConfigured()) return { configured: false as const };
   try {
     const cloud = await getKitsasCloud();
-    const reachable = await getKitsasInit().then(() => true).catch(() => false);
+    const reachable = await getKitsasInit()
+      .then(() => true)
+      .catch(() => false);
     return { configured: true as const, id: cloud.id, name: cloud.name, url: cloud.url, reachable };
   } catch (error) {
     return { configured: true as const, error: error instanceof Error ? error.message : 'Kitsas cloud login failed.' };

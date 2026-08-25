@@ -2,17 +2,55 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function ImportPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
   async function upload(form: FormData) {
-    setBusy(true); setMessage(null);
+    setBusy(true);
+    setMessage(null);
     const response = await fetch('/api/budgets/import', { method: 'POST', body: form });
     const body = await response.json().catch(() => null);
-    if (!response.ok) { setMessage(body?.error || 'Tuonti epäonnistui.'); setBusy(false); return; }
+    if (!response.ok) {
+      setMessage(body?.error || 'Tuonti epäonnistui.');
+      setBusy(false);
+      return;
+    }
     router.push('/');
   }
-  return <main className="shell"><header className="topbar"><a className="brand" href="/">BUDU</a></header><section className="setup"><p className="eyebrow">Talousarvion tuonti</p><h1>Lähetä talousarvio.</h1><p className="lede">CSV- ja Excel-tiedostot käyvät. Tiedostosta luetaan ensimmäinen välilehti.</p><form className="card" action={upload}><div className="form-row"><label htmlFor="file">Talousarviotiedosto</label><input id="file" name="file" type="file" accept=".csv,.xlsx,.xls" required /></div><div className="form-row"><label htmlFor="name">Talousarvion nimi (vapaaehtoinen)</label><input id="name" name="name" placeholder="Talousarvio 2026" /></div><p className="label">Budu tunnistaa tavallisen talousarviopohjan ja yhdistää <code>tilinumero</code>-sarakkeen Kitsaan tileihin. Yksinkertaisessa tuonnissa voit ohittaa tilin oletuksen rivikohtaisesti lisäämällä <code>kind</code>-sarakkeen arvolla <code>income</code> tai <code>expense</code>.</p>{message && <p className="notice">{message}</p>}<button className="button" disabled={busy}>{busy ? 'Tuodaan...' : 'Tuo talousarvio'}</button></form></section></main>;
+  return (
+    <main className="shell">
+      <header className="topbar">
+        <Link className="brand" href="/">
+          BUDU
+        </Link>
+      </header>
+      <section className="setup">
+        <p className="eyebrow">Talousarvion tuonti</p>
+        <h1>Lähetä talousarvio.</h1>
+        <p className="lede">CSV- ja Excel-tiedostot käyvät. Tiedostosta luetaan ensimmäinen välilehti.</p>
+        <form className="card" action={upload}>
+          <div className="form-row">
+            <label htmlFor="file">Talousarviotiedosto</label>
+            <input id="file" name="file" type="file" accept=".csv,.xlsx,.xls" required />
+          </div>
+          <div className="form-row">
+            <label htmlFor="name">Talousarvion nimi (vapaaehtoinen)</label>
+            <input id="name" name="name" placeholder="Talousarvio 2026" />
+          </div>
+          <p className="label">
+            Budu tunnistaa tavallisen talousarviopohjan ja yhdistää <code>tilinumero</code>-sarakkeen Kitsaan tileihin.
+            Yksinkertaisessa tuonnissa voit ohittaa tilin oletuksen rivikohtaisesti lisäämällä <code>kind</code>
+            -sarakkeen arvolla <code>income</code> tai <code>expense</code>.
+          </p>
+          {message && <p className="notice">{message}</p>}
+          <button className="button" disabled={busy}>
+            {busy ? 'Tuodaan...' : 'Tuo talousarvio'}
+          </button>
+        </form>
+      </section>
+    </main>
+  );
 }

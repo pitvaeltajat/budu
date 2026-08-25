@@ -17,7 +17,11 @@ export async function POST(request: Request) {
   const requested = new URL(request.url).searchParams.get('budgetId');
   const budget = requested
     ? await prisma.budget.findFirst({ where: { id: requested, createdById: session.user.id }, select: { id: true } })
-    : await prisma.budget.findFirst({ where: { createdById: session.user.id }, orderBy: { updatedAt: 'desc' }, select: { id: true } });
+    : await prisma.budget.findFirst({
+        where: { createdById: session.user.id },
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true },
+      });
   if (!budget) return Response.json({ error: 'Talousarviota ei löytynyt.' }, { status: 404 });
   /** A run already under way is left alone; two syncs of one budget would only race. */
   const running = await prisma.syncRun.findFirst({ where: { budgetId: budget.id, status: 'RUNNING' } });
@@ -25,6 +29,9 @@ export async function POST(request: Request) {
   try {
     return Response.json({ status: 'completed', ...(await syncBudget(budget.id, 'full')) });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : 'Kitsaan haku epäonnistui.' }, { status: 502 });
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'Kitsaan haku epäonnistui.' },
+      { status: 502 },
+    );
   }
 }

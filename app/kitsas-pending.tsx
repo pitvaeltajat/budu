@@ -23,15 +23,23 @@ export function KitsasPending({ budgetId }: { budgetId: string }) {
         const response = await fetch(`/api/kitsas/sync?budgetId=${encodeURIComponent(budgetId)}`, { method: 'POST' });
         const body = await response.json().catch(() => null);
         if (cancelled) return;
-        if (!response.ok) { setError(body?.error || 'Kitsaan haku epäonnistui.'); return; }
+        if (!response.ok) {
+          setError(body?.error || 'Kitsaan haku epäonnistui.');
+          return;
+        }
         // Another tab may already be running the sync; wait it out rather than starting a second.
-        if (body?.status === 'running') { setTimeout(() => router.refresh(), 4000); return; }
+        if (body?.status === 'running') {
+          setTimeout(() => router.refresh(), 4000);
+          return;
+        }
         router.refresh();
       } catch {
         if (!cancelled) setError('Kitsaan haku epäonnistui.');
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [budgetId, router]);
 
   if (error) return <p className="notice">{error}</p>;

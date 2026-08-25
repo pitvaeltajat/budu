@@ -45,10 +45,14 @@ async function loginToCloud(): Promise<KitsasCloud> {
   if (!response.ok) throw new Error(`Kitsas login failed (${response.status}).`);
   const body = (await response.json()) as CompatibilityLogin;
   const clouds = Array.isArray(body.clouds) ? (body.clouds as CompatibilityCloud[]) : [];
-  const usable = clouds.filter((cloud) => typeof cloud.url === 'string' && cloud.url && typeof cloud.token === 'string' && cloud.token);
+  const usable = clouds.filter(
+    (cloud) => typeof cloud.url === 'string' && cloud.url && typeof cloud.token === 'string' && cloud.token,
+  );
   if (!usable.length) throw new Error('The Kitsas user has no accessible clouds.');
   const wanted = process.env.KITSAS_CLOUD_ID;
-  const selected = wanted ? usable.find((cloud) => String(cloud.id) === wanted) : usable.find((cloud) => cloud.active !== false) || usable[0];
+  const selected = wanted
+    ? usable.find((cloud) => String(cloud.id) === wanted)
+    : usable.find((cloud) => cloud.active !== false) || usable[0];
   if (!selected) throw new Error(`Kitsas cloud ${wanted} is not accessible to this user.`);
   return {
     id: Number(selected.id),
@@ -62,7 +66,12 @@ export async function getKitsasCloud(): Promise<KitsasCloud> {
   const manualUrl = process.env.KITSAS_API_URL?.replace(/\/$/, '');
   const manualToken = process.env.KITSAS_TOKEN;
   if (manualUrl && manualToken) {
-    return { id: Number(process.env.KITSAS_CLOUD_ID) || 0, name: 'Configured cloud', url: manualUrl, token: manualToken };
+    return {
+      id: Number(process.env.KITSAS_CLOUD_ID) || 0,
+      name: 'Configured cloud',
+      url: manualUrl,
+      token: manualToken,
+    };
   }
   if (cached && cached.expiresAt > Date.now()) return cached.cloud;
   const cloud = await loginToCloud();

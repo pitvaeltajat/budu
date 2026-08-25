@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertNoOverlap, sectionForAccount, sectionSortKey, OTHER_SECTION, BUDGET_SECTIONS } from '../lib/budget-sections.ts';
+import {
+  assertNoOverlap,
+  sectionForAccount,
+  sectionSortKey,
+  OTHER_SECTION,
+  BUDGET_SECTIONS,
+} from '../lib/budget-sections.ts';
 
 test('section ranges do not overlap', () => {
   assert.equal(assertNoOverlap(), true);

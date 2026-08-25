@@ -30,7 +30,14 @@ export type SyncOutcome = {
 };
 
 type VoucherListItem = { id?: unknown; pvm?: unknown; otsikko?: unknown; summa?: unknown };
-type VoucherEntry = { id?: unknown; pvm?: unknown; tili?: unknown; selite?: unknown; debet?: unknown; kredit?: unknown };
+type VoucherEntry = {
+  id?: unknown;
+  pvm?: unknown;
+  tili?: unknown;
+  selite?: unknown;
+  debet?: unknown;
+  kredit?: unknown;
+};
 type Voucher = { id?: unknown; pvm?: unknown; otsikko?: unknown; viennit?: unknown; liitteet?: unknown };
 export type StoredAttachment = { id: number; name: string; type: string };
 
@@ -120,7 +127,10 @@ export async function syncBudget(budgetId: string, mode: SyncMode, cache?: Vouch
     const unique = new Map(listed.map((item) => [item.id, item]));
 
     const known = new Map(
-      (await prisma.kitsasVoucherState.findMany({ where: { budgetId: budget.id } })).map((row) => [row.voucherId, row.signature]),
+      (await prisma.kitsasVoucherState.findMany({ where: { budgetId: budget.id } })).map((row) => [
+        row.voucherId,
+        row.signature,
+      ]),
     );
     const pending = [...unique.values()].filter((item) => mode === 'full' || known.get(item.id) !== item.signature);
 
@@ -154,7 +164,8 @@ export async function syncBudget(budgetId: string, mode: SyncMode, cache?: Vouch
         const line = accounts.get(account);
         const amount = line?.kind === 'INCOME' ? asNumber(entry.kredit) : asNumber(entry.debet);
         if (!line || !Number.isFinite(amount) || amount <= 0 || !Number.isSafeInteger(entryId)) continue;
-        const occurredOn = typeof entry.pvm === 'string' ? entry.pvm : typeof voucher.pvm === 'string' ? voucher.pvm : null;
+        const occurredOn =
+          typeof entry.pvm === 'string' ? entry.pvm : typeof voucher.pvm === 'string' ? voucher.pvm : null;
         if (!occurredOn || !/^\d{4}-\d{2}-\d{2}$/.test(occurredOn)) continue;
         const description = asText(entry.selite) || asText(voucher.otsikko) || `Voucher ${item.id}`;
         const fields = {
@@ -168,7 +179,9 @@ export async function syncBudget(budgetId: string, mode: SyncMode, cache?: Vouch
           rawPayload: attachments.length ? { attachments } : Prisma.DbNull,
         };
         await prisma.expense.upsert({
-          where: { budgetId_source_externalId: { budgetId: budget.id, source: 'KITSAS', externalId: `${item.id}:${entryId}` } },
+          where: {
+            budgetId_source_externalId: { budgetId: budget.id, source: 'KITSAS', externalId: `${item.id}:${entryId}` },
+          },
           update: fields,
           create: { budgetId: budget.id, source: 'KITSAS', externalId: `${item.id}:${entryId}`, ...fields },
         });
@@ -193,7 +206,11 @@ export async function syncBudget(budgetId: string, mode: SyncMode, cache?: Vouch
       const stale = [...known.keys()].filter((id) => !live.has(id));
       if (stale.length) {
         const removed = await prisma.expense.deleteMany({
-          where: { budgetId: budget.id, source: 'KITSAS', OR: stale.map((id) => ({ externalId: { startsWith: `${id}:` } })) },
+          where: {
+            budgetId: budget.id,
+            source: 'KITSAS',
+            OR: stale.map((id) => ({ externalId: { startsWith: `${id}:` } })),
+          },
         });
         await prisma.kitsasVoucherState.deleteMany({ where: { budgetId: budget.id, voucherId: { in: stale } } });
         pruned = removed.count;
@@ -210,11 +227,24 @@ export async function syncBudget(budgetId: string, mode: SyncMode, cache?: Vouch
         completedAt: new Date(),
       },
     });
-    return { budgetId: budget.id, mode, listed: unique.size, changed: pending.length, fetched: fetchedFromKitsas, imported, pruned, ms };
+    return {
+      budgetId: budget.id,
+      mode,
+      listed: unique.size,
+      changed: pending.length,
+      fetched: fetchedFromKitsas,
+      imported,
+      pruned,
+      ms,
+    };
   } catch (error) {
     await prisma.syncRun.update({
       where: { id: sync.id },
-      data: { status: 'FAILED', detail: error instanceof Error ? error.message : 'Unknown error', completedAt: new Date() },
+      data: {
+        status: 'FAILED',
+        detail: error instanceof Error ? error.message : 'Unknown error',
+        completedAt: new Date(),
+      },
     });
     throw error;
   }

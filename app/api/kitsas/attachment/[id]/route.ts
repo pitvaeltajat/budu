@@ -15,7 +15,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: 'Kirjautuminen vaaditaan.' }, { status: 401 });
   const id = Number((await context.params).id);
-  if (!Number.isSafeInteger(id) || id < 1) return Response.json({ error: 'Virheellinen liitetunnus.' }, { status: 400 });
+  if (!Number.isSafeInteger(id) || id < 1)
+    return Response.json({ error: 'Virheellinen liitetunnus.' }, { status: 400 });
 
   /**
    * Only serve attachments this user's own budgets actually reference. Without
@@ -34,7 +35,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
   try {
     const file = await getKitsasAttachment(id);
-    const contentType = ALLOWED.includes(file.contentType.split(';')[0].trim()) ? file.contentType : 'application/octet-stream';
+    const contentType = ALLOWED.includes(file.contentType.split(';')[0].trim())
+      ? file.contentType
+      : 'application/octet-stream';
     return new Response(file.body, {
       headers: {
         'Content-Type': contentType,
@@ -44,6 +47,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       },
     });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : 'Liitteen haku epäonnistui.' }, { status: 502 });
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'Liitteen haku epäonnistui.' },
+      { status: 502 },
+    );
   }
 }

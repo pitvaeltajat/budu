@@ -17,14 +17,14 @@ The first worksheet in a `.csv`, `.xls`, or `.xlsx` file is imported. Budu suppo
 
 For the simple format, use these headers:
 
-| Header | Required | Meaning |
-| --- | --- | --- |
-| `category` | Yes | Display name of the budget category |
-| `planned` | Yes | Planned amount in euros |
-| `account` | For Kitsas sync | Kitsas expense account number to match |
-| `description` | No | Internal description |
-| `budget_name` | No | Default budget title |
-| `currency` | No | Defaults to `EUR` |
+| Header        | Required        | Meaning                                |
+| ------------- | --------------- | -------------------------------------- |
+| `category`    | Yes             | Display name of the budget category    |
+| `planned`     | Yes             | Planned amount in euros                |
+| `account`     | For Kitsas sync | Kitsas expense account number to match |
+| `description` | No              | Internal description                   |
+| `budget_name` | No              | Default budget title                   |
+| `currency`    | No              | Defaults to `EUR`                      |
 
 Importing a file creates a new budget; it does not discard prior local budgets or expenses.
 
@@ -41,10 +41,10 @@ It has no methods capable of posting, editing, or deleting anything in Kitsas. B
 
 Kitsas exposes two hosts, and they are not interchangeable:
 
-| Host | Variables | Serves |
-| --- | --- | --- |
-| KitsasHub (`api.kitsas.fi`, test `test-api.kitsas.fi`) | `KITSAS_HUB_*` | Login, books, accounts, dimensions, fiscal years |
-| Legacy per-book cloud backend | resolved at runtime; `KITSAS_CLOUD_ID`, `KITSAS_EXPENSES_PATH` | `GET /init`, `GET /tositteet`, `GET /tositteet/{id}` |
+| Host                                                   | Variables                                                      | Serves                                               |
+| ------------------------------------------------------ | -------------------------------------------------------------- | ---------------------------------------------------- |
+| KitsasHub (`api.kitsas.fi`, test `test-api.kitsas.fi`) | `KITSAS_HUB_*`                                                 | Login, books, accounts, dimensions, fiscal years     |
+| Legacy per-book cloud backend                          | resolved at runtime; `KITSAS_CLOUD_ID`, `KITSAS_EXPENSES_PATH` | `GET /init`, `GET /tositteet`, `GET /tositteet/{id}` |
 
 The documented Hub API has no voucher read endpoint — only `POST /v1/vouchers`, which Budu never calls. Realized-expense ingestion therefore uses the legacy cloud backend, which Kitsas confirmed is alive and usable.
 
@@ -58,13 +58,13 @@ That login is the integration's only non-`GET` request, and it is authentication
 
 Confirmed against a test book on 2026-08-24. `GET /tositteet?alkupvm=…&loppupvm=…` returns list items of `{id, pvm, tyyppi, tila, tunniste, otsikko, summa}`; the per-entry account breakdown requires `GET /tositteet/{id}`, whose `viennit[]` entries carry:
 
-| Field | Type | Note |
-| --- | --- | --- |
-| `id` | number | Unique per book, not per voucher; Budu keys on `{voucherId}:{entryId}` anyway |
-| `tili` | number | Account number |
-| `debet` / `kredit` | decimal **string** | Only one of the two is present; the other is absent, not zero |
-| `pvm` | `YYYY-MM-DD` string | Per entry, falling back to the voucher's `pvm` |
-| `selite` | string | Entry description |
+| Field              | Type                | Note                                                                          |
+| ------------------ | ------------------- | ----------------------------------------------------------------------------- |
+| `id`               | number              | Unique per book, not per voucher; Budu keys on `{voucherId}:{entryId}` anyway |
+| `tili`             | number              | Account number                                                                |
+| `debet` / `kredit` | decimal **string**  | Only one of the two is present; the other is absent, not zero                 |
+| `pvm`              | `YYYY-MM-DD` string | Per entry, falling back to the voucher's `pvm`                                |
+| `selite`           | string              | Entry description                                                             |
 
 Amounts arriving as strings is why `asNumber` in the sync route parses rather than casts. A debit-side entry has no `kredit` key at all, so the unused side is `NaN` and the entry is skipped — that is what keeps the bank contra entry out of the totals.
 
@@ -86,7 +86,7 @@ Invoice files are retrievable but cannot be linked to directly. Voucher detail c
 
 Kitsas runs a test server at `https://test-api.kitsas.fi` (Swagger at `https://test-api.kitsas.fi/api`; the machine-readable spec is at `/api-json`, since the `/api` page itself is a single-page app). A test account can be created there freely, but data retention is not guaranteed. Set `KITSAS_HUB_URL="https://test-api.kitsas.fi"` to point discovery at it — `.env.example` defaults to the test server. The Kitsas desktop client connects to the same server with `--api https://test-api.kitsas.fi`; on macOS the bundle hides the CLI, so run `/Applications/Kitsas.app/Contents/MacOS/Kitsas --api …` or `open -n -a Kitsas --args --api …`.
 
-The cloud backend the test Hub hands back lives on a *third* host — `test-app.kitsas.fi/cloud/{cloudid}` — which is why the cloud URL must be read from `clouds[]` and cannot be derived from the Hub host.
+The cloud backend the test Hub hands back lives on a _third_ host — `test-app.kitsas.fi/cloud/{cloudid}` — which is why the cloud URL must be read from `clouds[]` and cannot be derived from the Hub host.
 
 Creating a book through `POST /v1/books` allocates the cloud but does **not** provision its database schema: `/init` and `/tositteet` then fail with `relation "k{cloudid}.asetus" does not exist`. Initialize a new book from the desktop client instead.
 

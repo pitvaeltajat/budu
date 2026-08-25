@@ -7,11 +7,11 @@ services:
       POSTGRES_USER: budu
       POSTGRES_PASSWORD: budu
     ports:
-      - "5436:5432"
+      - '5436:5432'
     volumes:
       - budu_pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U budu -d budu"]
+      test: ['CMD-SHELL', 'pg_isready -U budu -d budu']
       interval: 5s
       timeout: 5s
       retries: 10

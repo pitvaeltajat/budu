@@ -70,7 +70,10 @@ export async function getKitsasAttachment(id: number): Promise<KitsasAttachment>
     cache: 'no-store',
   });
   if (!response.ok) throw new Error(`Kitsas attachment request failed (${response.status}).`);
-  return { body: await response.arrayBuffer(), contentType: response.headers.get('content-type') || 'application/octet-stream' };
+  return {
+    body: await response.arrayBuffer(),
+    contentType: response.headers.get('content-type') || 'application/octet-stream',
+  };
 }
 
 export async function getKitsasVoucher(id: number): Promise<unknown> {
