@@ -7,3 +7,6 @@ node_modules
 .pnpm-store
 .vercel
 .env*
+
+# Agent worktrees: full copies of this repo, never part of a commit here.
+.claude/worktrees
