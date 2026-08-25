@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { AttachmentLinks, type AttachmentFile } from './attachment-links';
 
 /**
  * Cumulative spend against the budget line. Cumulative rather than per-voucher
@@ -11,8 +12,14 @@ import { useEffect, useRef, useState } from 'react';
 const CURRENT = '#0d54d9';
 const PREVIOUS = '#757f92';
 
-export type CategoryAttachment = { id: number; name: string; type: string };
-export type CategoryItem = { id: string; date: string; description: string; amountCents: number; attachments?: CategoryAttachment[] };
+export type CategoryAttachment = AttachmentFile;
+export type CategoryItem = {
+  id: string;
+  date: string;
+  description: string;
+  amountCents: number;
+  attachments?: CategoryAttachment[];
+};
 
 export type CategoryDetailProps = {
   category: string;
@@ -33,7 +40,8 @@ const money = (cents: number, currency: string) =>
   new Intl.NumberFormat('fi-FI', { style: 'currency', currency, maximumFractionDigits: 0 }).format(cents / 100);
 const moneyExact = (cents: number, currency: string) =>
   new Intl.NumberFormat('fi-FI', { style: 'currency', currency }).format(cents / 100);
-const shortDate = (iso: string) => new Intl.DateTimeFormat('fi-FI', { day: 'numeric', month: 'numeric' }).format(new Date(iso));
+const shortDate = (iso: string) =>
+  new Intl.DateTimeFormat('fi-FI', { day: 'numeric', month: 'numeric' }).format(new Date(iso));
 const fullDate = (iso: string) => new Intl.DateTimeFormat('fi-FI').format(new Date(iso));
 const dayOffset = (iso: string, from: string) => Math.round((Date.parse(iso) - Date.parse(from)) / DAY);
 
@@ -86,7 +94,9 @@ export function CategoryDetail(props: CategoryDetailProps) {
         ref={dialogRef}
         className="modal"
         onClose={() => setOpen(false)}
-        onClick={(event) => { if (event.target === dialogRef.current) setOpen(false); }}
+        onClick={(event) => {
+          if (event.target === dialogRef.current) setOpen(false);
+        }}
       >
         {open && (
           <div className="modal-body">
@@ -104,10 +114,22 @@ export function CategoryDetail(props: CategoryDetailProps) {
             </div>
 
             <div className="modal-summary">
-              <div><span className="label">Arvio</span><strong>{moneyExact(plannedCents, currency)}</strong></div>
-              <div><span className="label">Tänä vuonna</span><strong>{moneyExact(currentTotal, currency)}</strong></div>
-              <div><span className="label">Viime vuonna samaan aikaan</span><strong>{moneyExact(previousToDate, currency)}</strong></div>
-              <div><span className="label">Viime vuosi yhteensä</span><strong>{moneyExact(previousTotal, currency)}</strong></div>
+              <div>
+                <span className="label">Arvio</span>
+                <strong>{moneyExact(plannedCents, currency)}</strong>
+              </div>
+              <div>
+                <span className="label">Tänä vuonna</span>
+                <strong>{moneyExact(currentTotal, currency)}</strong>
+              </div>
+              <div>
+                <span className="label">Viime vuonna samaan aikaan</span>
+                <strong>{moneyExact(previousToDate, currency)}</strong>
+              </div>
+              <div>
+                <span className="label">Viime vuosi yhteensä</span>
+                <strong>{moneyExact(previousTotal, currency)}</strong>
+              </div>
             </div>
 
             <Chart
@@ -129,23 +151,17 @@ export function CategoryDetail(props: CategoryDetailProps) {
                   {props.current.map((item) => (
                     <tr
                       key={item.id}
-                      ref={(node) => { if (node) rowRefs.current.set(item.id, node); else rowRefs.current.delete(item.id); }}
+                      ref={(node) => {
+                        if (node) rowRefs.current.set(item.id, node);
+                        else rowRefs.current.delete(item.id);
+                      }}
                       className={item.id === activeId ? 'is-active' : undefined}
                     >
                       <td>
                         <strong>{item.description}</strong>
                         <br />
                         <span className="label">{fullDate(item.date)}</span>
-                        {item.attachments?.length ? (
-                          <span className="attachments">
-                            {item.attachments.map((file) => (
-                              <a key={file.id} href={`/api/kitsas/attachment/${file.id}`} target="_blank" rel="noreferrer" className="attachment">
-                                {file.type === 'application/pdf' ? 'PDF' : file.type.startsWith('image/') ? 'Kuva' : 'Liite'}
-                                <span className="attachment-name">{file.name}</span>
-                              </a>
-                            ))}
-                          </span>
-                        ) : null}
+                        <AttachmentLinks files={item.attachments} />
                       </td>
                       <td className="right">{moneyExact(item.amountCents, currency)}</td>
                     </tr>
@@ -226,9 +242,18 @@ function Chart({
    */
   const endLabels = (() => {
     const labels = [];
-    if (current.length) labels.push({ text: 'Nyt', fill: CURRENT, weight: 650, y: y(totalAt(current, elapsedDays)) + 4, anchor: true });
-    if (plannedCents > 0) labels.push({ text: 'Arvio', fill: 'var(--muted-foreground)', weight: 400, y: y(plannedCents) + 4, anchor: false });
-    if (previous.length) labels.push({ text: 'Viime v.', fill: PREVIOUS, weight: 400, y: y(previous.at(-1)!.total) + 4, anchor: false });
+    if (current.length)
+      labels.push({ text: 'Nyt', fill: CURRENT, weight: 650, y: y(totalAt(current, elapsedDays)) + 4, anchor: true });
+    if (plannedCents > 0)
+      labels.push({
+        text: 'Arvio',
+        fill: 'var(--muted-foreground)',
+        weight: 400,
+        y: y(plannedCents) + 4,
+        anchor: false,
+      });
+    if (previous.length)
+      labels.push({ text: 'Viime v.', fill: PREVIOUS, weight: 400, y: y(previous.at(-1)!.total) + 4, anchor: false });
     /** Keep the current year where it is and push everything else clear of it. */
     for (let i = 1; i < labels.length; i++) {
       for (let j = 0; j < i; j++) {
@@ -259,39 +284,120 @@ function Chart({
           }
           onActiveChange(nearest ? nearest.id : null);
         }}
-        onMouseLeave={() => { setHover(null); onActiveChange(null); }}
+        onMouseLeave={() => {
+          setHover(null);
+          onActiveChange(null);
+        }}
       >
-        <line x1={pad.left} y1={pad.top + plotHeight} x2={pad.left + plotWidth} y2={pad.top + plotHeight} stroke="var(--border)" strokeWidth="1" />
+        <line
+          x1={pad.left}
+          y1={pad.top + plotHeight}
+          x2={pad.left + plotWidth}
+          y2={pad.top + plotHeight}
+          stroke="var(--border)"
+          strokeWidth="1"
+        />
         {plannedCents > 0 && (
           <>
-            <line x1={pad.left} y1={y(plannedCents)} x2={pad.left + plotWidth} y2={y(plannedCents)} stroke="var(--muted-foreground)" strokeWidth="2" strokeDasharray="2 5" strokeLinecap="round" />
+            <line
+              x1={pad.left}
+              y1={y(plannedCents)}
+              x2={pad.left + plotWidth}
+              y2={y(plannedCents)}
+              stroke="var(--muted-foreground)"
+              strokeWidth="2"
+              strokeDasharray="2 5"
+              strokeLinecap="round"
+            />
           </>
         )}
-        {previous.length > 0 && <path d={path(previous, totalDays)} fill="none" stroke={PREVIOUS} strokeWidth="2" strokeLinejoin="round" />}
-        {current.length > 0 && <path d={path(current, elapsedDays)} fill="none" stroke={CURRENT} strokeWidth="2" strokeLinejoin="round" />}
+        {previous.length > 0 && (
+          <path d={path(previous, totalDays)} fill="none" stroke={PREVIOUS} strokeWidth="2" strokeLinejoin="round" />
+        )}
+        {current.length > 0 && (
+          <path d={path(current, elapsedDays)} fill="none" stroke={CURRENT} strokeWidth="2" strokeLinejoin="round" />
+        )}
         {previous.map((point) => (
-          <circle key={`p-${point.id}`} cx={x(point.day)} cy={y(point.total)} r="2.5" fill={PREVIOUS} stroke="var(--card)" strokeWidth="1.5" />
+          <circle
+            key={`p-${point.id}`}
+            cx={x(point.day)}
+            cy={y(point.total)}
+            r="2.5"
+            fill={PREVIOUS}
+            stroke="var(--card)"
+            strokeWidth="1.5"
+          />
         ))}
-        {current.filter((point) => point.day <= elapsedDays).map((point) => (
-          <circle key={`c-${point.id}`} cx={x(point.day)} cy={y(point.total)} r={point.id === activeId ? 5 : 3} fill={CURRENT} stroke="var(--card)" strokeWidth="2" />
-        ))}
+        {current
+          .filter((point) => point.day <= elapsedDays)
+          .map((point) => (
+            <circle
+              key={`c-${point.id}`}
+              cx={x(point.day)}
+              cy={y(point.total)}
+              r={point.id === activeId ? 5 : 3}
+              fill={CURRENT}
+              stroke="var(--card)"
+              strokeWidth="2"
+            />
+          ))}
         {endLabels.map((label) => (
-          <text key={label.text} x={pad.left + plotWidth + 8} y={label.y} fontSize="12" fill={label.fill} fontWeight={label.weight}>
+          <text
+            key={label.text}
+            x={pad.left + plotWidth + 8}
+            y={label.y}
+            fontSize="12"
+            fill={label.fill}
+            fontWeight={label.weight}
+          >
             {label.text}
           </text>
         ))}
         {hoverDay !== null && (
           <>
-            <line x1={x(hoverDay)} y1={pad.top} x2={x(hoverDay)} y2={pad.top + plotHeight} stroke="var(--border)" strokeWidth="1" />
-            <circle cx={x(hoverDay)} cy={y(totalAt(previous, hoverDay))} r="4" fill={PREVIOUS} stroke="var(--card)" strokeWidth="2" />
-            <circle cx={x(hoverDay)} cy={y(totalAt(current, hoverDay))} r="4" fill={CURRENT} stroke="var(--card)" strokeWidth="2" />
+            <line
+              x1={x(hoverDay)}
+              y1={pad.top}
+              x2={x(hoverDay)}
+              y2={pad.top + plotHeight}
+              stroke="var(--border)"
+              strokeWidth="1"
+            />
+            <circle
+              cx={x(hoverDay)}
+              cy={y(totalAt(previous, hoverDay))}
+              r="4"
+              fill={PREVIOUS}
+              stroke="var(--card)"
+              strokeWidth="2"
+            />
+            <circle
+              cx={x(hoverDay)}
+              cy={y(totalAt(current, hoverDay))}
+              r="4"
+              fill={CURRENT}
+              stroke="var(--card)"
+              strokeWidth="2"
+            />
           </>
         )}
         {elapsedDays < totalDays && (
-          <line x1={x(elapsedDays)} y1={pad.top} x2={x(elapsedDays)} y2={pad.top + plotHeight} stroke="var(--border)" strokeWidth="1" strokeDasharray="3 4" />
+          <line
+            x1={x(elapsedDays)}
+            y1={pad.top}
+            x2={x(elapsedDays)}
+            y2={pad.top + plotHeight}
+            stroke="var(--border)"
+            strokeWidth="1"
+            strokeDasharray="3 4"
+          />
         )}
-        <text x={pad.left} y={height - 8} fontSize="12" fill="var(--muted-foreground)">{shortDate(periodStart)}</text>
-        <text x={pad.left + plotWidth} y={height - 8} fontSize="12" fill="var(--muted-foreground)" textAnchor="end">{shortDate(dayToDate(totalDays))}</text>
+        <text x={pad.left} y={height - 8} fontSize="12" fill="var(--muted-foreground)">
+          {shortDate(periodStart)}
+        </text>
+        <text x={pad.left + plotWidth} y={height - 8} fontSize="12" fill="var(--muted-foreground)" textAnchor="end">
+          {shortDate(dayToDate(totalDays))}
+        </text>
       </svg>
       <figcaption className="chart-readout">
         {hoverDay === null ? (
@@ -299,8 +405,14 @@ function Chart({
         ) : (
           <>
             <span className="label">{fullDate(dayToDate(hoverDay))}</span>
-            <span><span className="swatch" style={{ background: CURRENT }} /> Nyt {money(totalAt(current, hoverDay), currency)}</span>
-            <span><span className="swatch" style={{ background: PREVIOUS }} /> Viime v. {money(totalAt(previous, hoverDay), currency)}</span>
+            <span>
+              <span className="swatch" style={{ background: CURRENT }} /> Nyt{' '}
+              {money(totalAt(current, hoverDay), currency)}
+            </span>
+            <span>
+              <span className="swatch" style={{ background: PREVIOUS }} /> Viime v.{' '}
+              {money(totalAt(previous, hoverDay), currency)}
+            </span>
           </>
         )}
       </figcaption>
