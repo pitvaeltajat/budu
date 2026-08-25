@@ -22,13 +22,15 @@ Behaviour worth a test goes in `tests/` as a `node --test` file, and into the `t
 
 # Landing your work
 
-Finished work belongs on `origin/main`, not left uncommitted in a working tree. Once the checks above pass, commit it and push:
+Finished work belongs on `origin/main`, not left uncommitted in a working tree. Once the checks above pass, commit it and push — from whatever branch or worktree you are on:
 
 ```
-git add -A && git commit && git push origin main
+git add -A && git commit && git push origin HEAD:main
 ```
 
-Working on a branch or in a worktree is fine — merge it into `main` and push that. Do not leave the tree dirty for someone else to figure out.
+`HEAD:main` is the part that matters. `git push origin main` pushes the local `main` ref, which in a worktree or on a feature branch is whatever `main` was when you started — usually not your work. And do not try to merge into `main` first: it is checked out in the primary working tree at `~/pitva/budu`, so git refuses to update it from anywhere else (`branch is currently checked out`). Push straight to the remote branch instead; the primary checkout catches up with `git pull --ff-only` next time someone works there.
+
+Do not leave the tree dirty for someone else to figure out.
 
 Write the commit message the way the log already reads: one imperative sentence saying what changed for the user, no scope prefix, no bullet list. "Flag overspending rows and put BUDU in the header", not "feat(dashboard): add overspend flags".
 
