@@ -58,3 +58,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
+
+/**
+ * Emails allowed to change the shared talousarvio, comma-separated. Reading it
+ * is open to everyone who can sign in, so this is the only gate left standing
+ * on the write paths: import, edit and delete.
+ *
+ * An empty list leaves every signed-in user an admin, which is what Budu did
+ * before the list existed. That is not "open to anyone": `signIn` above already
+ * turns away every account outside `GOOGLE_WORKSPACE_DOMAIN`, so the widest
+ * this setting can get is the organisation itself.
+ */
+const adminEmails = (process.env.BUDU_ADMIN_EMAILS ?? '')
+  .split(',')
+  .map((entry) => entry.trim().toLowerCase())
+  .filter(Boolean);
+
+export function isAdminEmail(email?: string | null) {
+  if (!adminEmails.length) return true;
+  return typeof email === 'string' && adminEmails.includes(email.toLowerCase());
+}
+
+/**
+ * The session when it belongs to an admin, otherwise the reason it does not.
+ * Server Actions are reachable as bare POST requests and not only through the
+ * UI that renders them, so every write path calls this for itself rather than
+ * trusting that the admin page declined to draw the button.
+ */
+export async function adminSession() {
+  const session = await auth();
+  if (!session?.user?.id) return { session: null, error: 'Kirjautuminen vaaditaan.', status: 401 as const };
+  if (!isAdminEmail(session.user.email))
+    return { session: null, error: 'Vain ylläpitäjä voi muuttaa talousarviota.', status: 403 as const };
+  return { session, error: null, status: 200 as const };
+}

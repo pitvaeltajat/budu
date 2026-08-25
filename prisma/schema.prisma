@@ -27,7 +27,6 @@ model Budget {
   createdBy User         @relation(fields: [createdById], references: [id])
   createdById String
   lines     BudgetLine[]
-  expenses  Expense[]
   syncRuns  SyncRun[]
   voucherStates KitsasVoucherState[]
 }
@@ -49,22 +48,37 @@ model BudgetLine {
   @@unique([budgetId, category])
 }
 
-model Expense {
-  id            String   @id @default(cuid())
-  budgetId      String
-  budget        Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
-  source        String   @default("KITSAS")
-  externalId    String?
-  occurredOn    DateTime @db.Date
-  description   String
-  category      String?
-  amountCents   Int
-  kind          String   @default("EXPENSE")
-  rawPayload    Json?
-  importedAt    DateTime @default(now())
+/// One row per Kitsas voucher entry (vienti), stored as it was booked rather
+/// than as a budget happens to interpret it.
+///
+/// Both sides are kept because which one counts is a property of the budget
+/// line, not of the booking: an expense line reads `debetCents`, an income line
+/// `kreditCents`. Deriving that at read time is what lets a line be reclassified
+/// between meno and tulo without refetching anything — the earlier shape stored
+/// one side chosen at sync time, so a reclassification silently left figures
+/// taken from the wrong column. A single net amount would not do either: on an
+/// entry carrying both sides it cannot be told apart from no entry at all.
+///
+/// Not scoped to a budget. Every budget reads the same book, so a voucher entry
+/// is a fact about the book; budgets join to it by account number at read time.
+/// This is also what lets a budget line be added for an account later and show
+/// its history immediately, with no sync in between.
+model KitsasEntry {
+  voucherId   Int
+  entryId     Int
+  occurredOn  DateTime @db.Date
+  account     Int
+  description String
+  debetCents  Int      @default(0)
+  kreditCents Int      @default(0)
+  /// Attachment references as `{ attachments: [{ id, name, type }] }`. The bytes
+  /// stay in Kitsas and are served through an authenticated proxy.
+  rawPayload  Json?
+  syncedAt    DateTime @updatedAt
 
-  @@unique([budgetId, source, externalId])
-  @@index([budgetId, occurredOn])
+  @@id([voucherId, entryId])
+  @@index([account, occurredOn])
+  @@index([occurredOn])
 }
 
 model SyncRun {

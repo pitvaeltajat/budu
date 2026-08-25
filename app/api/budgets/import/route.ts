@@ -1,12 +1,17 @@
 import * as XLSX from 'xlsx';
-import { auth } from '@/lib/auth';
+import { adminSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { parseBudgetWorksheet } from '@/lib/budget-import';
 export const runtime = 'nodejs';
 
+/**
+ * An import becomes the talousarvio everyone in the organisation sees, so it is
+ * restricted to admins. `createdById` is kept as a record of who uploaded it,
+ * not as an access check.
+ */
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) return Response.json({ error: 'Sign in required.' }, { status: 401 });
+  const { session, error: denied, status } = await adminSession();
+  if (!session) return Response.json({ error: denied }, { status });
   const form = await request.formData();
   const file = form.get('file');
   if (!(file instanceof File) || !file.size)
@@ -30,10 +35,11 @@ export async function POST(request: Request) {
       },
     });
     /**
-     * Realized expenses hang off the budget, so a freshly imported one starts
-     * empty. Filling it is left to the dashboard, which asks for the sync while
-     * showing the Kitsas-backed figures as pending: a large book takes tens of
-     * seconds, and that is a poor thing to make an upload wait on.
+     * A freshly imported budget has no sync run of its own, so the dashboard
+     * treats its Kitsas-backed figures as pending and asks for the sync itself:
+     * a large book takes tens of seconds, and that is a poor thing to make an
+     * upload wait on. Bookings already fetched for accounts this budget maps
+     * are shown straight away — they are not scoped to a budget.
      */
     return Response.json({ id: budget.id, lines: parsed.lines.length }, { status: 201 });
   } catch (error) {

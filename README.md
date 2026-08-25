@@ -11,6 +11,20 @@ Realtime budget tracking: upload a planned budget, then compare it with read-onl
 
 The included Postgres container is exposed at `127.0.0.1:5436`, so it can run alongside Klapi’s database on port 5432.
 
+## Who sees what
+
+Budu tracks **one talousarvio at a time, shared by the whole organisation**. Every signed-in user sees the same budget on the dashboard; nothing is scoped per user. Sign-in is already restricted to `GOOGLE_WORKSPACE_DOMAIN` (enforced on Google’s `hd` claim, not the email suffix), so holding a valid session _is_ the membership check. `Budget.createdById` records who uploaded a budget and is not an access control.
+
+Changing that shared budget is restricted to admins:
+
+| Variable            | Meaning                                                                                                                                                                                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BUDU_ADMIN_EMAILS` | Comma-separated emails allowed to import, edit and delete the talousarvio. **Unset means every signed-in user is an admin**, which is what Budu did before the setting existed — the domain restriction still applies, so the widest this gets is the organisation itself. |
+
+Admins get `/admin`, where the talousarvio is imported or replaced, rows are reclassified between meno and tulo, and planned amounts are corrected. The dashboard itself is read-only for everyone, admins included. Reading realized expenses from Kitsas (`POST /api/kitsas/sync`) stays open to any signed-in user, because it fetches bookings rather than changing the budget.
+
+The active budget is simply the most recently updated one. Only an import or an admin edit moves `updatedAt`; a Kitsas sync writes expenses, sync runs and voucher state but never the budget row, so the nightly cron cannot change which budget is on screen.
+
 ## Budget file format
 
 The first worksheet in a `.csv`, `.xls`, or `.xlsx` file is imported. Budu supports both a simple header-row format and the multi-year Finnish Talousarvio layout.
@@ -26,7 +40,9 @@ For the simple format, use these headers:
 | `budget_name` | No              | Default budget title                   |
 | `currency`    | No              | Defaults to `EUR`                      |
 
-Importing a file creates a new budget; it does not discard prior local budgets or expenses.
+Importing a file creates a new budget; it does not discard prior local budgets or the bookings read from Kitsas. Being the newest, it becomes the one everybody sees, and the previous one stays intact under "Aiemmat talousarviot" on `/admin` until an admin deletes it. The last remaining budget cannot be deleted, since that would leave the whole organisation on the empty state.
+
+Reclassifying a row between meno and tulo on `/admin` costs nothing beyond the write — see "Bookings are not budget-shaped" below.
 
 For the Talousarvio layout, Budu identifies the rightmost year (for example `2026`), reads account rows from `tilinumero`/column B, and treats that account number as the Kitsas match key. Headings in the sheet are ignored: section names and their order are fixed in `lib/budget-sections.ts`, keyed by account-number range, because the association's budget has a settled shape and the account number is the single source of truth. An account outside every stated range is kept and shown under "Muut erät" rather than dropped. `pnpm test:sections` checks the ranges do not overlap and that known accounts land where the budget expects. Rows with an empty budget amount are imported as €0, so matching remains complete.
 
@@ -37,7 +53,7 @@ The integration makes only `GET` requests to the legacy voucher endpoints:
 - `GET /tositteet?alkupvm=…&loppupvm=…`
 - `GET /tositteet/{id}`
 
-It has no methods capable of posting, editing, or deleting anything in Kitsas. Budu stores its own copy of matched debit entries in PostgreSQL.
+It has no methods capable of posting, editing, or deleting anything in Kitsas. Budu stores its own copy of the matched voucher entries in PostgreSQL, both sides of each.
 
 Kitsas exposes two hosts, and they are not interchangeable:
 
@@ -66,7 +82,7 @@ Confirmed against a test book on 2026-08-24. `GET /tositteet?alkupvm=…&loppupv
 | `pvm`              | `YYYY-MM-DD` string | Per entry, falling back to the voucher's `pvm`                                |
 | `selite`           | string              | Entry description                                                             |
 
-Amounts arriving as strings is why `asNumber` in the sync route parses rather than casts. A debit-side entry has no `kredit` key at all, so the unused side is `NaN` and the entry is skipped — that is what keeps the bank contra entry out of the totals.
+Amounts arriving as strings is why `asNumber` in the sync route parses rather than casts. A debit-side entry has no `kredit` key at all, so the unused side parses as `NaN` and is recorded as zero. What keeps the bank contra entry out of the totals is the account filter: 1900 is not a budget account, so no line maps to it and it is never stored.
 
 Note that voucher detail is an N+1 fetch: one request per voucher in the range. That is fine for an association's books and would need batching for a larger one.
 
@@ -92,7 +108,21 @@ Creating a book through `POST /v1/books` allocates the cloud but does **not** pr
 
 `GET /api/kitsas/discover` uses the official Hub client to read the available books, accounts, dimensions, and fiscal years. Set the `KITSAS_HUB_*` variables to use it. Its response also carries a `cloud` block — the resolved cloudid, name, URL, and whether `GET /init` on that cloud answered — so a broken cloud configuration is visible without running a sync. The mock connection is covered by `pnpm test:kitsas-mock` and uses no network or real Kitsas data.
 
-Kitsas sync fetches the current budget period through today and the equivalent date range one year earlier. The dashboard compares each mapped account's budget, current-period realization, and same-period-prior-year realization. Expense lines use debit entries; income lines (3000–3999) use credit entries.
+Kitsas sync fetches the current budget period through today and the equivalent date range one year earlier. The dashboard compares each mapped account's budget, current-period realization, and same-period-prior-year realization.
+
+### Bookings are not budget-shaped
+
+`KitsasEntry` holds one row per voucher entry (vienti), keyed by `(voucherId, entryId)`, carrying the account, the date, the description, attachment references, and **both** the debit and the credit column. It is not scoped to a budget: every budget reads the same book, so an entry is a fact about the book, and budgets join to it by account number when the dashboard renders.
+
+Which column counts is therefore a property of the budget line rather than of the booking — `lib/realized.ts` is the whole rule, and `pnpm test` covers it. Three things follow:
+
+- **Reclassifying a line between meno and tulo needs no refetch.** It changes how existing rows are read, nothing more. The earlier shape stored one side chosen at sync time, so a flip left figures taken from the wrong column, and correcting them meant deleting and refetching.
+- **A credit on an expense account subtracts.** Refunds and corrections reduce the spend instead of being dropped, which is what the old `amount <= 0` skip did — silently overstating spending on any account that had ever seen one.
+- **Adding a budget line for an account already synced shows its history immediately**, with no sync in between, and deleting a budget leaves the bookings alone.
+
+Both columns are kept rather than a single net amount: on an entry carrying both sides, a net of zero cannot be told apart from no entry at all.
+
+The sync still consults the budget for two things only — which date ranges to fetch, and which accounts are worth storing. Both are volume decisions, not interpretations; the book carries balance-sheet accounts no talousarvio references.
 
 ## Vercel
 

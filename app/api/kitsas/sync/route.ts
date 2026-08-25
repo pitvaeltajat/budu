@@ -1,5 +1,6 @@
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { activeBudgetId } from '@/lib/budget';
 import { kitsasIsConfigured } from '@/lib/kitsas';
 import { syncBudget } from '@/lib/kitsas-sync';
 
@@ -15,19 +16,21 @@ export async function POST(request: Request) {
   if (!session?.user?.id) return Response.json({ error: 'Kirjautuminen vaaditaan.' }, { status: 401 });
   if (!kitsasIsConfigured()) return Response.json({ error: 'Kitsasta ei ole yhdistetty.' }, { status: 409 });
   const requested = new URL(request.url).searchParams.get('budgetId');
-  const budget = requested
-    ? await prisma.budget.findFirst({ where: { id: requested, createdById: session.user.id }, select: { id: true } })
-    : await prisma.budget.findFirst({
-        where: { createdById: session.user.id },
-        orderBy: { updatedAt: 'desc' },
-        select: { id: true },
-      });
-  if (!budget) return Response.json({ error: 'Talousarviota ei löytynyt.' }, { status: 404 });
+  /**
+   * Copying realized bookings in from Kitsas is a read, not a change to the
+   * talousarvio, so this stays open to any signed-in user rather than to admins
+   * alone: whoever opens a dashboard that is still pending should be able to
+   * fill it. Kitsas itself is only ever read; see the safety contract.
+   */
+  const budgetId = requested
+    ? ((await prisma.budget.findUnique({ where: { id: requested }, select: { id: true } }))?.id ?? null)
+    : await activeBudgetId();
+  if (!budgetId) return Response.json({ error: 'Talousarviota ei löytynyt.' }, { status: 404 });
   /** A run already under way is left alone; two syncs of one budget would only race. */
-  const running = await prisma.syncRun.findFirst({ where: { budgetId: budget.id, status: 'RUNNING' } });
+  const running = await prisma.syncRun.findFirst({ where: { budgetId, status: 'RUNNING' } });
   if (running) return Response.json({ status: 'running' });
   try {
-    return Response.json({ status: 'completed', ...(await syncBudget(budget.id, 'full')) });
+    return Response.json({ status: 'completed', ...(await syncBudget(budgetId, 'full')) });
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : 'Kitsaan haku epäonnistui.' },

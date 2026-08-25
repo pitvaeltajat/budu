@@ -104,8 +104,11 @@ export async function syncBudget(budgetId: string, mode: SyncMode, cache?: Vouch
   const startedAt = Date.now();
   const budget = await prisma.budget.findUnique({ where: { id: budgetId }, include: { lines: true } });
   if (!budget) throw new Error('Budget not found.');
-  const accounts = new Map(
-    budget.lines.filter((line) => line.kitsasAccount !== null).map((line) => [line.kitsasAccount!, line]),
+  // A set, not a map to the lines: nothing in the sync reads a line any more.
+  // Which side of an entry counts, and under which heading it appears, are the
+  // budget's business and are resolved when the dashboard renders.
+  const accounts = new Set(
+    budget.lines.map((line) => line.kitsasAccount).filter((account): account is number => account !== null),
   );
   if (!accounts.size) throw new Error('Add an account column to the budget before syncing Kitsas.');
 
@@ -161,29 +164,44 @@ export async function syncBudget(budgetId: string, mode: SyncMode, cache?: Vouch
         if (!entry) continue;
         const account = asNumber(entry.tili);
         const entryId = asNumber(entry.id);
-        const line = accounts.get(account);
-        const amount = line?.kind === 'INCOME' ? asNumber(entry.kredit) : asNumber(entry.debet);
-        if (!line || !Number.isFinite(amount) || amount <= 0 || !Number.isSafeInteger(entryId)) continue;
+        if (!Number.isSafeInteger(account) || !Number.isSafeInteger(entryId)) continue;
+        /**
+         * Only accounts some budget line maps to are stored. This is the one
+         * place the budget still narrows ingest, and it is a volume decision
+         * rather than an interpretation: the book carries balance-sheet
+         * accounts no talousarvio ever references.
+         */
+        if (!accounts.has(account)) continue;
+        /**
+         * Both sides are stored, so nothing here depends on how a budget line is
+         * classified. A debit-side entry has no `kredit` key at all, so the
+         * unused side parses as NaN and is recorded as zero.
+         */
+        const debet = asNumber(entry.debet);
+        const kredit = asNumber(entry.kredit);
+        const debetCents = Number.isFinite(debet) ? Math.max(0, Math.round(debet * 100)) : 0;
+        const kreditCents = Number.isFinite(kredit) ? Math.max(0, Math.round(kredit * 100)) : 0;
+        // An entry with neither side carries no figure; that is what keeps the
+        // bank contra entry out of the table when it maps to no budget account.
+        if (debetCents <= 0 && kreditCents <= 0) continue;
         const occurredOn =
           typeof entry.pvm === 'string' ? entry.pvm : typeof voucher.pvm === 'string' ? voucher.pvm : null;
         if (!occurredOn || !/^\d{4}-\d{2}-\d{2}$/.test(occurredOn)) continue;
         const description = asText(entry.selite) || asText(voucher.otsikko) || `Voucher ${item.id}`;
         const fields = {
           occurredOn: new Date(`${occurredOn}T00:00:00.000Z`),
+          account,
           description,
-          category: line.category,
-          kind: line.kind,
-          amountCents: Math.round(amount * 100),
+          debetCents,
+          kreditCents,
           // Explicit null, not undefined: an attachment removed in Kitsas has to
           // clear the stored reference rather than leave the old one standing.
           rawPayload: attachments.length ? { attachments } : Prisma.DbNull,
         };
-        await prisma.expense.upsert({
-          where: {
-            budgetId_source_externalId: { budgetId: budget.id, source: 'KITSAS', externalId: `${item.id}:${entryId}` },
-          },
+        await prisma.kitsasEntry.upsert({
+          where: { voucherId_entryId: { voucherId: item.id, entryId } },
           update: fields,
-          create: { budgetId: budget.id, source: 'KITSAS', externalId: `${item.id}:${entryId}`, ...fields },
+          create: { voucherId: item.id, entryId, ...fields },
         });
         imported++;
       }
@@ -199,18 +217,19 @@ export async function syncBudget(budgetId: string, mode: SyncMode, cache?: Vouch
      * and happens in both modes. The list covers exactly the ranges this budget
      * tracks, and those ranges derive from the budget's own period, so a known
      * voucher missing from it has genuinely gone.
+     *
+     * Entries are pruned by voucher id across the whole table, not per budget:
+     * a voucher deleted in Kitsas is deleted for every budget that reads the
+     * same book. If its date merely moved out of this budget's ranges, whichever
+     * budget covers the new date restores it on its next run.
      */
     let pruned = 0;
     {
       const live = new Set(unique.keys());
       const stale = [...known.keys()].filter((id) => !live.has(id));
       if (stale.length) {
-        const removed = await prisma.expense.deleteMany({
-          where: {
-            budgetId: budget.id,
-            source: 'KITSAS',
-            OR: stale.map((id) => ({ externalId: { startsWith: `${id}:` } })),
-          },
+        const removed = await prisma.kitsasEntry.deleteMany({
+          where: { voucherId: { in: stale } },
         });
         await prisma.kitsasVoucherState.deleteMany({ where: { budgetId: budget.id, voucherId: { in: stale } } });
         pruned = removed.count;

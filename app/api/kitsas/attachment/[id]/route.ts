@@ -19,17 +19,15 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return Response.json({ error: 'Virheellinen liitetunnus.' }, { status: 400 });
 
   /**
-   * Only serve attachments this user's own budgets actually reference. Without
-   * this the route would be an open reader of every attachment in the book,
-   * since the ids are small sequential integers.
+   * Only serve attachments a stored booking actually references. Without this
+   * the route would be an open reader of every attachment in the book, since
+   * the ids are small sequential integers. The book is shared across the
+   * organisation, so the check is that the file belongs to a booking Budu has
+   * imported — not that the viewer imported it.
    */
-  const referenced = await prisma.expense.findFirst({
-    where: {
-      source: 'KITSAS',
-      budget: { createdById: session.user.id },
-      rawPayload: { path: ['attachments'], array_contains: [{ id }] },
-    },
-    select: { id: true },
+  const referenced = await prisma.kitsasEntry.findFirst({
+    where: { rawPayload: { path: ['attachments'], array_contains: [{ id }] } },
+    select: { voucherId: true },
   });
   if (!referenced) return Response.json({ error: 'Liitettä ei löytynyt.' }, { status: 404 });
 

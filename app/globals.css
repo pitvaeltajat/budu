@@ -298,7 +298,8 @@ code {
 }
 button:focus-visible,
 a:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
@@ -644,4 +645,72 @@ input:focus-visible {
   border-color: color-mix(in srgb, var(--success) 30%, transparent);
   background: color-mix(in srgb, var(--success) 10%, var(--card));
   color: var(--success);
+}
+
+/* Admin */
+.admin-block {
+  margin-top: 16px;
+}
+.admin-block h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.admin-kind-column {
+  width: 110px;
+}
+.admin-amount-column {
+  width: 160px;
+}
+.editor-table label {
+  cursor: text;
+}
+.editor-table select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--foreground);
+  padding: 7px 8px;
+  font-size: 14px;
+}
+.amount-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--foreground);
+  padding: 7px 9px;
+  font-size: 14px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.amount-input.is-invalid {
+  border-color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 7%, var(--card));
+}
+/* The totals follow the typing, so they stay in reach at the bottom of a long sheet. */
+.editor-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -24px -24px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 8px 8px;
+  background: color-mix(in srgb, var(--card) 92%, var(--background));
+  backdrop-filter: blur(4px);
+}
+.editor-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+.editor-totals strong {
+  color: var(--foreground);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
 }

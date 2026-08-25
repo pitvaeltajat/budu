@@ -1,5 +1,7 @@
-import { auth, signOut } from '@/lib/auth';
+import { auth, isAdminEmail, signOut } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { activeBudgetOrder } from '@/lib/budget';
+import { realizedCents } from '@/lib/realized';
 import { kitsasIsConfigured } from '@/lib/kitsas';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
@@ -20,11 +22,32 @@ const dateTime = (value: Date) =>
 export default async function Home() {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
+  const admin = isAdminEmail(session.user.email);
+  // The one shared talousarvio; see lib/budget.ts for why this is not scoped to the viewer.
   const budget = await prisma.budget.findFirst({
-    where: { createdById: session.user.id },
-    orderBy: { updatedAt: 'desc' },
-    include: { lines: { orderBy: { sortOrder: 'asc' } }, expenses: { orderBy: { occurredOn: 'desc' } } },
+    orderBy: activeBudgetOrder,
+    include: { lines: { orderBy: { sortOrder: 'asc' } } },
   });
+  /**
+   * Bookings are joined by account rather than carried on the budget, so this
+   * fetches the two periods the dashboard compares and lets the render decide
+   * which side of each entry counts. Both years in one query: the set is a small
+   * association's bookings for two years, and slicing it in memory keeps the
+   * period arithmetic in one place.
+   */
+  const accounts = budget
+    ? budget.lines.map((line) => line.kitsasAccount).filter((account): account is number => account !== null)
+    : [];
+  const entries =
+    budget && accounts.length
+      ? await prisma.kitsasEntry.findMany({
+          where: {
+            account: { in: accounts },
+            occurredOn: { gte: previousPeriodStart(budget), lte: periodEndOf(budget) },
+          },
+          orderBy: { occurredOn: 'desc' },
+        })
+      : [];
   const lastSync = budget
     ? await prisma.syncRun.findFirst({
         where: { budgetId: budget.id, source: 'KITSAS', status: 'COMPLETED' },
@@ -41,6 +64,7 @@ export default async function Home() {
           BUDU
         </Link>
         <div className="user">
+          {admin && <Link href="/admin">Ylläpito</Link>}
           <span>{session.user.email}</span>
           <form
             action={async () => {
@@ -55,18 +79,51 @@ export default async function Home() {
       {budget ? (
         <Dashboard
           budget={budget}
+          entries={entries}
+          admin={admin}
           configured={kitsasIsConfigured()}
           lastFetchedAt={lastSync?.completedAt ?? null}
           awaitingKitsas={awaitingKitsas}
         />
       ) : (
-        <Setup />
+        <Setup admin={admin} />
       )}
     </main>
   );
 }
 
-function Setup() {
+/** Start of the budget's own period, defaulting to the calendar year. */
+function periodStartOf(budget: { startsOn: Date | null }) {
+  return budget.startsOn || new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
+}
+
+/** End of the full budget period, which is the far edge of what the chart draws. */
+function periodEndOf(budget: { startsOn: Date | null; endsOn: Date | null }) {
+  return budget.endsOn || new Date(Date.UTC(periodStartOf(budget).getUTCFullYear(), 11, 31));
+}
+
+function previousPeriodStart(budget: { startsOn: Date | null }) {
+  const start = new Date(periodStartOf(budget));
+  start.setUTCFullYear(start.getUTCFullYear() - 1);
+  return start;
+}
+
+/**
+ * Shown until a talousarvio exists. Only an admin can do anything about that,
+ * so everyone else is told who to ask rather than handed a button that answers
+ * 403.
+ */
+function Setup({ admin }: { admin: boolean }) {
+  if (!admin)
+    return (
+      <section className="setup">
+        <p className="eyebrow">Ei vielä talousarviota</p>
+        <h1>Talousarviota ei ole vielä tuotu.</h1>
+        <p className="lede">
+          Kun ylläpitäjä on tuonut talousarvion, se näkyy tällä sivulla kaikille yhdistyksen tunnuksille.
+        </p>
+      </section>
+    );
   return (
     <section className="setup">
       <p className="eyebrow">Aloita tästä</p>
@@ -89,7 +146,7 @@ function Setup() {
             <code>income</code> tai <code>expense</code> riveittäin), <code>budget_name</code>, <code>currency</code>
           </li>
         </ul>
-        <Link className="button" href="/import">
+        <Link className="button" href="/admin">
           Tuo talousarvio
         </Link>
       </div>
@@ -121,15 +178,21 @@ function rowStatus(kind: string, plannedCents: number, used: number, prior: numb
 
 const DAY = 86_400_000;
 
-type DashboardBudget = Prisma.BudgetGetPayload<{ include: { lines: true; expenses: true } }>;
+type DashboardBudget = Prisma.BudgetGetPayload<{ include: { lines: true } }>;
+type DashboardLine = DashboardBudget['lines'][number];
+type Entry = Prisma.KitsasEntryGetPayload<object>;
 
 function Dashboard({
   budget,
+  entries,
+  admin,
   configured,
   lastFetchedAt,
   awaitingKitsas,
 }: {
   budget: DashboardBudget;
+  entries: Entry[];
+  admin: boolean;
   configured: boolean;
   lastFetchedAt: Date | null;
   awaitingKitsas: boolean;
@@ -144,23 +207,30 @@ function Dashboard({
   previousFullEnd.setUTCFullYear(previousFullEnd.getUTCFullYear() - 1);
   const previousEnd = new Date(periodEnd);
   previousEnd.setUTCFullYear(previousEnd.getUTCFullYear() - 1);
-  const current = budget.expenses.filter((item) => item.occurredOn >= periodStart && item.occurredOn <= periodEnd);
+  const current = entries.filter((item) => item.occurredOn >= periodStart && item.occurredOn <= periodEnd);
   // The table compares like-for-like; the chart wants the completed year.
-  const previous = budget.expenses.filter((item) => item.occurredOn >= previousStart && item.occurredOn <= previousEnd);
-  const previousFull = budget.expenses.filter(
-    (item) => item.occurredOn >= previousStart && item.occurredOn <= previousFullEnd,
-  );
+  const previous = entries.filter((item) => item.occurredOn >= previousStart && item.occurredOn <= previousEnd);
+  const previousFull = entries.filter((item) => item.occurredOn >= previousStart && item.occurredOn <= previousFullEnd);
+  /** Budget lines by Kitsas account, which is how a booking finds its row. */
+  const lineFor = new Map<number, DashboardLine>();
+  for (const line of budget.lines) if (line.kitsasAccount !== null) lineFor.set(line.kitsasAccount, line);
   const planned = budget.lines
     .filter((line) => line.kind === 'EXPENSE')
     .reduce((total, line) => total + line.plannedCents, 0);
   const incomePlanned = budget.lines
     .filter((line) => line.kind === 'INCOME')
     .reduce((total, line) => total + line.plannedCents, 0);
-  const actual = current.filter((item) => item.kind === 'EXPENSE').reduce((total, item) => total + item.amountCents, 0);
+  /** Totals across one slice, counting each booking through its own line's kind. */
+  const totalFor = (items: Entry[], kind: string) =>
+    items.reduce((total, item) => {
+      const line = lineFor.get(item.account);
+      return line?.kind === kind ? total + realizedCents(line, item) : total;
+    }, 0);
+  const actual = totalFor(current, 'EXPENSE');
   const remaining = planned - actual;
   const iso = (value: Date) => value.toISOString().slice(0, 10);
   /** rawPayload holds whatever the sync stored; only a well-formed attachment list is passed on. */
-  const attachmentsOf = (payload: DashboardBudget['expenses'][number]['rawPayload']) => {
+  const attachmentsOf = (payload: Entry['rawPayload']) => {
     const list =
       payload && typeof payload === 'object' && !Array.isArray(payload)
         ? (payload as { attachments?: unknown }).attachments
@@ -179,37 +249,57 @@ function Dashboard({
       .filter((file) => Number.isSafeInteger(file.id) && file.id > 0);
     return files.length ? files : undefined;
   };
-  const itemsFor = (items: DashboardBudget['expenses'], category: string) =>
+  /**
+   * A line's own bookings. Entries that net to nothing on the side this line
+   * reads are dropped: on an expense line a pure credit is a refund already
+   * subtracted from the running total, and drawing it as its own point would put
+   * a downward step on a cumulative chart.
+   */
+  const itemsFor = (items: Entry[], line: DashboardLine) =>
     items
-      .filter((item) => (item.category || 'Kohdistamaton') === category)
+      .filter((item) => item.account === line.kitsasAccount)
       .map((item) => ({
-        id: item.id,
+        id: `${item.voucherId}:${item.entryId}`,
         date: iso(item.occurredOn),
         description: item.description,
-        amountCents: item.amountCents,
+        amountCents: realizedCents(line, item),
         attachments: attachmentsOf(item.rawPayload),
-      }));
-  const byCategory = new Map<string, number>();
-  for (const expense of current) {
-    const key = expense.category || 'Kohdistamaton';
-    byCategory.set(key, (byCategory.get(key) || 0) + expense.amountCents);
-  }
-  const previousByCategory = new Map<string, number>();
-  for (const expense of previous) {
-    const key = expense.category || 'Kohdistamaton';
-    previousByCategory.set(key, (previousByCategory.get(key) || 0) + expense.amountCents);
-  }
+      }))
+      .filter((item) => item.amountCents > 0);
+  /**
+   * Realized totals keyed by category, which is the shape the pace summary and
+   * the table both read. The account is what joins a booking to a line; the
+   * category is only the label that lands on.
+   */
+  const totalsByCategory = (items: Entry[]) => {
+    const totals = new Map<string, number>();
+    for (const item of items) {
+      const line = lineFor.get(item.account);
+      if (!line) continue;
+      totals.set(line.category, (totals.get(line.category) || 0) + realizedCents(line, item));
+    }
+    return totals;
+  };
+  const byCategory = totalsByCategory(current);
+  const previousByCategory = totalsByCategory(previous);
   /** Last year in full, which is what tells each line what its own year is shaped like. */
-  const previousFullByCategory = new Map<string, number>();
-  for (const expense of previousFull) {
-    const key = expense.category || 'Kohdistamaton';
-    previousFullByCategory.set(key, (previousFullByCategory.get(key) || 0) + expense.amountCents);
-  }
+  const previousFullByCategory = totalsByCategory(previousFull);
   const elapsedDays = Math.max(1, Math.round((periodEnd.getTime() - periodStart.getTime()) / DAY));
   const totalDays = Math.max(elapsedDays, Math.round((fullPeriodEnd.getTime() - periodStart.getTime()) / DAY));
-  const incomeActual = current
-    .filter((item) => item.kind === 'INCOME')
-    .reduce((total, item) => total + item.amountCents, 0);
+  const incomeActual = totalFor(current, 'INCOME');
+  /** Recent spending: bookings that landed on an expense line, newest first. */
+  const recentExpenses = current
+    .map((item) => ({ item, line: lineFor.get(item.account) }))
+    .filter((row): row is { item: Entry; line: DashboardLine } => row.line?.kind === 'EXPENSE')
+    .map(({ item, line }) => ({
+      id: `${item.voucherId}:${item.entryId}`,
+      occurredOn: item.occurredOn,
+      description: item.description,
+      category: line.category,
+      amountCents: realizedCents(line, item),
+      attachments: attachmentsOf(item.rawPayload),
+    }))
+    .filter((row) => row.amountCents > 0);
   const pace = summarisePace({
     lines: budget.lines,
     usedByCategory: byCategory,
@@ -252,9 +342,11 @@ function Dashboard({
         alerts={pace.alerts}
       />
       <div className="actions">
-        <Link className="button secondary" href="/import">
-          Vaihda talousarvio
-        </Link>
+        {admin && (
+          <Link className="button secondary" href="/admin">
+            Muokkaa talousarviota
+          </Link>
+        )}
         {awaitingKitsas ? (
           <KitsasPending budgetId={budget.id} />
         ) : (
@@ -308,8 +400,8 @@ function Dashboard({
                           periodEnd={iso(fullPeriodEnd)}
                           todayIso={iso(periodEnd)}
                           previousStart={iso(previousStart)}
-                          current={itemsFor(current, line.category)}
-                          previous={itemsFor(previousFull, line.category)}
+                          current={itemsFor(current, line)}
+                          previous={itemsFor(previousFull, line)}
                         />
                         <br />
                         <span className="label">
@@ -336,25 +428,22 @@ function Dashboard({
             <h2>Viimeisimmät menot</h2>
             <span className="label">kuluva kausi</span>
           </div>
-          {current.filter((item) => item.kind === 'EXPENSE').length ? (
+          {recentExpenses.length ? (
             <table>
               <tbody>
-                {current
-                  .filter((item) => item.kind === 'EXPENSE')
-                  .slice(0, 8)
-                  .map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <strong>{item.description}</strong>
-                        <br />
-                        <span className="label">
-                          {date(item.occurredOn)} · {item.category || 'Kohdistamaton'}
-                        </span>
-                        <AttachmentLinks files={attachmentsOf(item.rawPayload)} />
-                      </td>
-                      <td className="right">{money(item.amountCents, budget.currency)}</td>
-                    </tr>
-                  ))}
+                {recentExpenses.slice(0, 8).map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <strong>{item.description}</strong>
+                      <br />
+                      <span className="label">
+                        {date(item.occurredOn)} · {item.category}
+                      </span>
+                      <AttachmentLinks files={item.attachments} />
+                    </td>
+                    <td className="right">{money(item.amountCents, budget.currency)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           ) : awaitingKitsas ? (
