@@ -239,3 +239,32 @@ Everything else can be developed now against `test-api.kitsas.fi`, which Budu al
 5. Staging UI on `/admin`, then one real claim posted as a draft to production, checked by hand in Kitsas — including
    that its tase-erä closes against the Holvi payment when that month is fetched.
 6. Backfill, in one batch, watched.
+
+## 5. Considered and rejected: paying the claims from a button
+
+The tempting next step is for kululaskut.fi (or Budu) to pay an approved claim out of Holvi directly. Written down here
+so it does not get re-litigated.
+
+**The blocker is a licence, not access.** Holvi's third-party interface is PSD2
+([holvi.github.io/psd2-api](https://holvi.github.io/psd2-api/), production `api.psd2.holvi.com`) and it does include
+payment initiation. But Holvi grants it only to a third party holding a valid certificate or registration from FIN-FSA
+as a payment service provider, with the customer's consent on top. So initiating payments means kululaskut.fi becomes a
+licensed payment institution, or rents the licence from an aggregator (Enable Banking, Tink, Neonomics) at a real price.
+The older proprietary Holvi API that people remember is not the route.
+
+**And it saves less than it looks like.** PIS does not remove strong authentication: every payment or batch still needs
+the account holder to confirm in the Holvi app. "One click" is really one click plus a phone confirmation, against a
+current cost of pasting an IBAN and an amount a dozen times a month.
+
+**The cheap version, if the manual paying ever becomes the bottleneck:** have kululaskut.fi emit the approved claims as
+a SEPA payment batch — `pain.001`, or whatever Holvi's import accepts; Holvi advertises ISO 20022 on the reconciliation
+side and the outbound upload path is unverified. The treasurer uploads it once and confirms with SCA. Same ergonomics,
+no licence, no stored credentials, and the treasurer stays the person who moves the money.
+
+**The reason to want it is real but obtainable otherwise.** A payment that originates from the claim knows its own
+reference and arkistointitunnus, which is exactly what would close the tase-erä in option A automatically instead of
+someone matching it by hand in Kitsas. A batch file gives that just as well as PIS does.
+
+**The argument against is not regulatory.** Budu's worst case today is a wrong number on a dashboard or a bad draft
+voucher, both recoverable. A one-click payer turns a compromised Google account into stolen funds, in an organisation
+whose treasurer changes every year or two, and where outgoing money is supposed to have two-person control.
