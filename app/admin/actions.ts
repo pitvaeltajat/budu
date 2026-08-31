@@ -84,6 +84,14 @@ export async function saveBudget(_previous: AdminState, formData: FormData): Pro
     if (remapped) {
       await tx.syncRun.deleteMany({ where: { budgetId: budget.id } });
       await tx.kitsasVoucherState.deleteMany({ where: { budgetId: budget.id } });
+      /**
+       * The unmapped list described the mapping that just changed, and only a
+       * full sync rewrites it. Left standing it goes on naming accounts this
+       * budget now maps perfectly well — and the dashboard goes on warning about
+       * money that is no longer missing, which is worse than no warning: it
+       * teaches people to ignore the one signal that catches a real gap.
+       */
+      await tx.kitsasUnmappedAccount.deleteMany({ where: { budgetId: budget.id } });
     }
     // Touching the budget row is deliberate: `updatedAt` is what marks this the
     // active talousarvio, so an edit keeps it the one everybody sees.
