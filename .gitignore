@@ -1,12 +1,13 @@
 node_modules
 .next
-.env
-.env.local
-!.env.example
 *.tsbuildinfo
 .pnpm-store
 .vercel
+
+# Every .env file is a secret except the template. The negation has to come
+# after the wildcard, or git never reaches it.
 .env*
+!.env.example
 
 # Agent worktrees: full copies of this repo, never part of a commit here.
 .claude/worktrees

@@ -72,7 +72,7 @@ That login is the integration's only non-`GET` request, and it is authentication
 
 ### Verified voucher shape
 
-Confirmed against a test book on 2026-08-24. `GET /tositteet?alkupvm=…&loppupvm=…` returns list items of `{id, pvm, tyyppi, tila, tunniste, otsikko, summa}`; the per-entry account breakdown requires `GET /tositteet/{id}`, whose `viennit[]` entries carry:
+Confirmed against a test book on 2026-08-24, and against the live book on 2026-08-31. `GET /tositteet?alkupvm=…&loppupvm=…` returns list items of `{id, pvm, tyyppi, tila, tunniste, otsikko, summa}`; the per-entry account breakdown requires `GET /tositteet/{id}`, whose `viennit[]` entries carry:
 
 | Field              | Type                | Note                                                                          |
 | ------------------ | ------------------- | ----------------------------------------------------------------------------- |

@@ -1,10 +1,13 @@
 # Plan: writing kirjanpito events into Kitsas
 
 Budu reads Kitsas today. This is the plan for making it write, once the association has production Kitsas access.
-Nothing here has been built; nothing here has been tried against a real book. Everything marked **verified** was checked
-against the production API description at `https://api.kitsas.fi/api-json` and the `kitsas-library@0.1.56` sources on
-2026-08-26. Everything marked **open** needs the production book, a look at the Holvi settings, or a decision from the
-person who does the kirjanpito.
+Nothing here has been built. Everything marked **verified** was checked against the production API description at
+`https://api.kitsas.fi/api-json` and the `kitsas-library@0.1.56` sources on 2026-08-26. Everything marked **open** needs
+a look at the Holvi settings or a decision from the person who does the kirjanpito.
+
+Production access arrived on 2026-08-31, so the read side is no longer theoretical: the book is `Pitkäjärven Vaeltajat
+ry`, cloud 14900, with fiscal years 2024–2026 and a 388-account tililuettelo. Nothing below has been _written_ to it —
+that remains the point of the plan — but the questions that only the real book could answer are answered inline.
 
 ## The short version
 
@@ -38,7 +41,9 @@ Two ways to satisfy it.
 ### Option A — the Holvi payment becomes a payment, not an expense (recommended)
 
 - In Holvi, under `Kirjanpito > Luokat`, the category used for kulukorvaus payments gets its `Tilinumero` pointed at a
-  **payable account** (ostovelat/siirtovelat, e.g. 2870) instead of an expense account.
+  **payable account** instead of an expense account. The book has one: **2960 Ostovelat**, with 2990 Siirtovelat as the
+  alternative. (An earlier draft of this plan guessed 2870; in this book that number is "Velat saman konsernin
+  yrityksille", which is not it.)
 - Budu posts each approved claim as `BILLOFCOSTS`: entries on the real expense accounts, and
   `contraEntry: { account: <that same payable>, newBalanceItem: true }`, which opens a tase-erä.
 - The Holvi payment then arrives against the payable and closes the erä. The expense is booked on the claim's own date,
@@ -55,9 +60,15 @@ Two ways to satisfy it.
 - Worth stating plainly because it is the honest baseline. If the Holvi category mapping is already fine-grained enough
   that the dashboard's rows come out right, this project is not worth doing.
 
-**Open, and it decides the rest:** how kulukorvaus payments out of Holvi are categorised today, and whether the book has
-a payable account to point them at. That is a look in Holvi's `Kirjanpito > Luokat` and in the Kitsas tililuettelo, not
-a code question.
+**Half of this is now settled.** The book has the payable account option A needs — 2960 Ostovelat — so that is not the
+obstacle. And the premise holds: through 2026 the Holvi addon books expenses straight onto the expense accounts (4210
+Retkikulut, 4230 Vaelluskulut, 4420 Kolon käyttökulut and 30-odd others all carry debits), with individuals as
+`kumppani` on a good share of them. So the expense account really is occupied, and option A really does require
+re-pointing a Holvi category.
+
+**Still open, and it decides the rest:** which Holvi category kulukorvaus payments use today. No 2026 voucher title
+mentions kulukorvaus, matkalasku or kilometrikorvaus, so they are not separable from the outside — that answer is in
+Holvi's `Kirjanpito > Luokat`, not in the Kitsas API.
 
 ### Two operational facts about the addon
 
