@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { adminSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { typedEuroCents } from '@/lib/euro';
+import { duplicateAccounts, parseAccount, INVALID_ACCOUNT } from '@/lib/budget-mapping';
 
 export type AdminState = { ok?: string; error?: string };
 
@@ -29,25 +30,60 @@ export async function saveBudget(_previous: AdminState, formData: FormData): Pro
   const name = String(formData.get('name') ?? '').trim();
   if (!name) return { error: 'Talousarviolla pitää olla nimi.' };
 
-  const updates: { id: string; plannedCents: number; kind: string }[] = [];
+  const updates: { id: string; plannedCents: number; kind: string; kitsasAccount: number | null }[] = [];
   for (const line of budget.lines) {
     const rawAmount = formData.get(`amount:${line.id}`);
     const rawKind = formData.get(`kind:${line.id}`);
+    const rawAccount = formData.get(`account:${line.id}`);
     // A row the form did not submit keeps whatever it had.
-    if (rawAmount === null && rawKind === null) continue;
+    if (rawAmount === null && rawKind === null && rawAccount === null) continue;
     const plannedCents = rawAmount === null ? line.plannedCents : typedEuroCents(String(rawAmount));
     if (!Number.isFinite(plannedCents))
       return { error: `Rivin "${line.category}" summa ei kelpaa. Käytä esimerkiksi muotoa 1250,50.` };
     const kind = rawKind === null ? line.kind : String(rawKind);
     if (!KINDS.has(kind)) return { error: `Rivin "${line.category}" laji ei kelpaa.` };
-    if (plannedCents !== line.plannedCents || kind !== line.kind) updates.push({ id: line.id, plannedCents, kind });
+    const kitsasAccount = rawAccount === null ? line.kitsasAccount : parseAccount(String(rawAccount));
+    if (kitsasAccount === INVALID_ACCOUNT)
+      return { error: `Rivin "${line.category}" tilinumero ei kelpaa. Anna Kitsaan tilinumero, esimerkiksi 4210.` };
+    if (plannedCents !== line.plannedCents || kind !== line.kind || kitsasAccount !== line.kitsasAccount)
+      updates.push({ id: line.id, plannedCents, kind, kitsasAccount });
   }
 
+  /**
+   * Two rows may not share an account. The dashboard joins a booking to a row
+   * through a map keyed by account number, so a duplicate would not double the
+   * figure — it would quietly drop whichever row lost the race, which is worse
+   * than refusing the save.
+   */
+  const intended = new Map(budget.lines.map((line) => [line.id, line.kitsasAccount]));
+  for (const update of updates) intended.set(update.id, update.kitsasAccount);
+  const duplicates = duplicateAccounts([...intended.values()]);
+  if (duplicates.length)
+    return {
+      error: `Sama Kitsas-tili on useammalla rivillä: ${duplicates.join(', ')}. Tili voi kuulua vain yhdelle riville.`,
+    };
+
   if (!updates.length && name === budget.name) return { ok: 'Ei muutoksia tallennettavaksi.' };
+  const remapped = updates.some((update) => {
+    const line = budget.lines.find((candidate) => candidate.id === update.id);
+    return line && update.kitsasAccount !== line.kitsasAccount;
+  });
 
   await prisma.$transaction(async (tx) => {
-    for (const { id, plannedCents, kind } of updates) {
-      await tx.budgetLine.update({ where: { id }, data: { plannedCents, kind } });
+    for (const { id, plannedCents, kind, kitsasAccount } of updates) {
+      await tx.budgetLine.update({ where: { id }, data: { plannedCents, kind, kitsasAccount } });
+    }
+    /**
+     * A changed account mapping makes the stored bookings incomplete: entries on
+     * the newly mapped account were discarded by every sync so far, and no
+     * amount of re-rendering will bring them back. Dropping this budget's sync
+     * runs is what puts the dashboard into its pending state, so it fetches
+     * again on the next load instead of showing a figure that is missing the
+     * very money the remap was for.
+     */
+    if (remapped) {
+      await tx.syncRun.deleteMany({ where: { budgetId: budget.id } });
+      await tx.kitsasVoucherState.deleteMany({ where: { budgetId: budget.id } });
     }
     // Touching the budget row is deliberate: `updatedAt` is what marks this the
     // active talousarvio, so an edit keeps it the one everybody sees.
@@ -56,7 +92,8 @@ export async function saveBudget(_previous: AdminState, formData: FormData): Pro
 
   revalidatePath('/');
   revalidatePath('/admin');
-  return { ok: `Tallennettu: ${updates.length} ${updates.length === 1 ? 'muutettu rivi' : 'muutettua riviä'}.` };
+  const saved = `Tallennettu: ${updates.length} ${updates.length === 1 ? 'muutettu rivi' : 'muutettua riviä'}.`;
+  return { ok: remapped ? `${saved} Tilikartta muuttui, joten kirjaukset haetaan Kitsaasta uudelleen.` : saved };
 }
 
 /**

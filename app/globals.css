@@ -727,8 +727,25 @@ select:focus-visible {
   margin: 0;
   font-size: 17px;
 }
+.admin-account-column {
+  width: 104px;
+}
 .admin-kind-column {
   width: 110px;
+}
+.account-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--foreground);
+  padding: 7px 9px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.account-input.is-invalid {
+  border-color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 7%, var(--card));
 }
 .admin-amount-column {
   width: 160px;

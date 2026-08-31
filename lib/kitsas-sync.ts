@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { getKitsasExpenses, getKitsasVoucher, kitsasIsConfigured } from '@/lib/kitsas';
+import { getKitsasExpenses, getKitsasInit, getKitsasVoucher, kitsasIsConfigured } from '@/lib/kitsas';
 
 /**
  * Kitsas offers no modified-since filter and no change feed — `muokattu` is
@@ -26,6 +26,8 @@ export type SyncOutcome = {
   fetched: number;
   imported: number;
   pruned: number;
+  /** P&L accounts carrying money that this budget maps nothing to. Only a full sync sets it. */
+  unmapped: number;
   ms: number;
 };
 
@@ -46,6 +48,42 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
 const asNumber = (value: unknown) =>
   typeof value === 'number' ? value : typeof value === 'string' ? Number(value.replace(',', '.')) : NaN;
 const asText = (value: unknown) => (typeof value === 'string' ? value : '');
+/** One side of an entry in cents. An absent side parses as NaN and counts as nothing. */
+const centsOf = (value: unknown) => {
+  const amount = asNumber(value);
+  return Number.isFinite(amount) ? Math.max(0, Math.round(amount * 100)) : 0;
+};
+
+/**
+ * Where the tuloslaskelma starts in the Finnish chart of accounts. Below this
+ * are vastaavaa and vastattavaa — the bank account, receivables, payables — and
+ * no talousarvio ever maps them, so reporting them as unmapped would bury the
+ * accounts that genuinely are missing under noise that is working as intended.
+ */
+const PROFIT_AND_LOSS_FROM = 3000;
+
+type UnmappedTotals = { entries: number; debetCents: number; kreditCents: number };
+
+/**
+ * Account names, read once per sync from the book's own /init. Without them the
+ * unmapped list is a column of bare numbers, which is exactly the thing nobody
+ * can act on. A failure here is not worth failing a sync over.
+ */
+async function accountNames(): Promise<Map<number, string>> {
+  try {
+    const init = asRecord(await getKitsasInit());
+    const accounts = Array.isArray(init?.tilit) ? init.tilit : [];
+    return new Map(
+      accounts
+        .map((raw) => asRecord(raw))
+        .filter((account): account is Record<string, unknown> => Boolean(account))
+        .map((account) => [asNumber(account.numero), asText(asRecord(account.nimi)?.fi).trim()] as const)
+        .filter(([number, name]) => Number.isSafeInteger(number) && name),
+    );
+  } catch {
+    return new Map();
+  }
+}
 
 /** Detail fetches are the expensive part; a small pool keeps Kitsas from being hammered. */
 async function mapPool<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
@@ -159,6 +197,8 @@ export async function syncBudget(
      * stalled on cache hits would look like a stuck sync.
      */
     let completed = 0;
+    /** Accounts seen carrying money that this budget maps nothing to. */
+    const unmapped = new Map<number, UnmappedTotals>();
     await mapPool(pending, 4, async (item) => {
       let detail = cache?.get(item.id);
       if (detail === undefined) {
@@ -193,17 +233,29 @@ export async function syncBudget(
          * place the budget still narrows ingest, and it is a volume decision
          * rather than an interpretation: the book carries balance-sheet
          * accounts no talousarvio ever references.
+         *
+         * What is skipped is counted rather than forgotten. A budget whose
+         * account numbers do not match the book's produces no error anywhere —
+         * the sync succeeds and the dashboard simply omits the money — so the
+         * skipped total is the only evidence that anything is wrong.
          */
-        if (!accounts.has(account)) continue;
+        if (!accounts.has(account)) {
+          if (account >= PROFIT_AND_LOSS_FROM) {
+            const seen = unmapped.get(account) ?? { entries: 0, debetCents: 0, kreditCents: 0 };
+            seen.entries += 1;
+            seen.debetCents += centsOf(entry.debet);
+            seen.kreditCents += centsOf(entry.kredit);
+            unmapped.set(account, seen);
+          }
+          continue;
+        }
         /**
          * Both sides are stored, so nothing here depends on how a budget line is
          * classified. A debit-side entry has no `kredit` key at all, so the
          * unused side parses as NaN and is recorded as zero.
          */
-        const debet = asNumber(entry.debet);
-        const kredit = asNumber(entry.kredit);
-        const debetCents = Number.isFinite(debet) ? Math.max(0, Math.round(debet * 100)) : 0;
-        const kreditCents = Number.isFinite(kredit) ? Math.max(0, Math.round(kredit * 100)) : 0;
+        const debetCents = centsOf(entry.debet);
+        const kreditCents = centsOf(entry.kredit);
         // An entry with neither side carries no figure; that is what keeps the
         // bank contra entry out of the table when it maps to no budget account.
         if (debetCents <= 0 && kreditCents <= 0) continue;
@@ -236,6 +288,28 @@ export async function syncBudget(
     });
 
     /**
+     * Replaced wholesale rather than upserted: an account that has since been
+     * mapped, or that no longer carries anything in the period, has to leave the
+     * list. Only a full sync may do this — an incremental run looks at the
+     * vouchers that changed, so the accounts it did not see are not evidence of
+     * anything, and rewriting the list from them would empty it every night.
+     */
+    if (mode === 'full') {
+      const names = unmapped.size ? await accountNames() : new Map<number, string>();
+      await prisma.$transaction([
+        prisma.kitsasUnmappedAccount.deleteMany({ where: { budgetId: budget.id } }),
+        prisma.kitsasUnmappedAccount.createMany({
+          data: [...unmapped.entries()].map(([account, totals]) => ({
+            budgetId: budget.id,
+            account,
+            name: names.get(account) ?? '',
+            ...totals,
+          })),
+        }),
+      ]);
+    }
+
+    /**
      * Deletions are visible in the list alone, so pruning costs nothing extra
      * and happens in both modes. The list covers exactly the ranges this budget
      * tracks, and those ranges derive from the budget's own period, so a known
@@ -265,7 +339,7 @@ export async function syncBudget(
       data: {
         status: 'COMPLETED',
         imported,
-        detail: `${mode}: listed ${unique.size}, changed ${pending.length}, fetched ${fetchedFromKitsas}, pruned ${pruned}, ${ms}ms`,
+        detail: `${mode}: listed ${unique.size}, changed ${pending.length}, fetched ${fetchedFromKitsas}, pruned ${pruned}, unmapped ${unmapped.size}, ${ms}ms`,
         completedAt: new Date(),
       },
     });
@@ -277,6 +351,7 @@ export async function syncBudget(
       fetched: fetchedFromKitsas,
       imported,
       pruned,
+      unmapped: unmapped.size,
       ms,
     };
   } catch (error) {

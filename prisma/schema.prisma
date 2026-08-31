@@ -29,6 +29,7 @@ model Budget {
   lines     BudgetLine[]
   syncRuns  SyncRun[]
   voucherStates KitsasVoucherState[]
+  unmappedAccounts KitsasUnmappedAccount[]
 }
 
 model BudgetLine {
@@ -105,4 +106,30 @@ model KitsasVoucherState {
   syncedAt  DateTime @updatedAt
 
   @@id([budgetId, voucherId])
+}
+
+/// Accounts a sync found carrying money that no budget line maps, so the figures
+/// were read from Kitsas and then dropped.
+///
+/// This exists because the sync's account filter is silent by design: it stores
+/// only entries on accounts some line maps and discards the rest without trace.
+/// A talousarvio written against a different chart of accounts therefore yields
+/// a dashboard that is quietly, confidently wrong — every sync reports success
+/// while six figures of real activity are simply absent from the page.
+///
+/// Scoped to a budget, because being unmapped is a fact about one budget's
+/// mapping over its own period rather than about the book. Replaced wholesale on
+/// each sync, so it can never describe a mapping that has since been corrected.
+model KitsasUnmappedAccount {
+  budgetId    String
+  budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  account     Int
+  /// The account's name in Kitsas, so the list reads without the tililuettelo open.
+  name        String
+  entries     Int      @default(0)
+  debetCents  Int      @default(0)
+  kreditCents Int      @default(0)
+  syncedAt    DateTime @updatedAt
+
+  @@id([budgetId, account])
 }

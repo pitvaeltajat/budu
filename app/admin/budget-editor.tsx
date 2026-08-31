@@ -13,7 +13,7 @@ export type EditorLine = {
   kind: string;
 };
 
-type Draft = { amount: string; kind: string };
+type Draft = { amount: string; kind: string; account: string };
 
 /**
  * The rows are edited in place rather than one dialog at a time: correcting a
@@ -37,7 +37,16 @@ export function BudgetEditor({
 }) {
   const [state, formAction, pending] = useActionState<AdminState, FormData>(saveBudget, {});
   const [drafts, setDrafts] = useState<Record<string, Draft>>(() =>
-    Object.fromEntries(lines.map((line) => [line.id, { amount: euroInputValue(line.plannedCents), kind: line.kind }])),
+    Object.fromEntries(
+      lines.map((line) => [
+        line.id,
+        {
+          amount: euroInputValue(line.plannedCents),
+          kind: line.kind,
+          account: line.kitsasAccount === null ? '' : String(line.kitsasAccount),
+        },
+      ]),
+    ),
   );
 
   const money = (cents: number) => new Intl.NumberFormat('fi-FI', { style: 'currency', currency }).format(cents / 100);
@@ -54,10 +63,26 @@ export function BudgetEditor({
     },
     { expense: 0, income: 0, invalid: 0 },
   );
+  const accountOf = (draft: Draft) => draft.account.trim();
   const changed = lines.filter((line) => {
     const draft = drafts[line.id];
-    return draft.kind !== line.kind || typedEuroCents(draft.amount) !== line.plannedCents;
+    return (
+      draft.kind !== line.kind ||
+      typedEuroCents(draft.amount) !== line.plannedCents ||
+      accountOf(draft) !== (line.kitsasAccount === null ? '' : String(line.kitsasAccount))
+    );
   }).length;
+  /**
+   * Two rows on one account is refused by the server; catching it here means the
+   * offending rows are marked while they are still on screen, rather than the
+   * whole save bouncing with a sentence about a row you have to go and find.
+   */
+  const duplicated = new Set(
+    lines
+      .map((line) => accountOf(drafts[line.id]))
+      .filter(Boolean)
+      .filter((account, index, all) => all.indexOf(account) !== index),
+  );
 
   return (
     <form action={formAction} className="card admin-block">
@@ -78,6 +103,7 @@ export function BudgetEditor({
         <thead>
           <tr>
             <th>Kohta</th>
+            <th className="admin-account-column">Kitsas-tili</th>
             <th className="admin-kind-column">Laji</th>
             <th className="right admin-amount-column">Arvio ({currency})</th>
           </tr>
@@ -91,7 +117,7 @@ export function BudgetEditor({
               <Fragment key={line.id}>
                 {heading && (
                   <tr className="group-row">
-                    <th colSpan={3} scope="colgroup">
+                    <th colSpan={4} scope="colgroup">
                       {heading}
                     </th>
                   </tr>
@@ -101,9 +127,25 @@ export function BudgetEditor({
                     <label htmlFor={`amount-${line.id}`}>{line.category}</label>
                     <br />
                     <span className="label">
-                      {line.kitsasAccount ? `tili ${line.kitsasAccount}` : 'ei Kitsas-tiliä'}
+                      {accountOf(draft) === (line.kitsasAccount === null ? '' : String(line.kitsasAccount))
+                        ? line.kitsasAccount
+                          ? `tili ${line.kitsasAccount}`
+                          : 'ei Kitsas-tiliä'
+                        : `tili ${line.kitsasAccount ?? '–'} → ${accountOf(draft) || '–'}`}
                       {draft.kind !== line.kind && ' · laji muuttuu'}
                     </span>
+                  </td>
+                  <td className="admin-account-column">
+                    <input
+                      className={duplicated.has(accountOf(draft)) ? 'account-input is-invalid' : 'account-input'}
+                      aria-label={`${line.category}: Kitsas-tili`}
+                      aria-invalid={duplicated.has(accountOf(draft))}
+                      name={`account:${line.id}`}
+                      inputMode="numeric"
+                      placeholder="—"
+                      value={draft.account}
+                      onChange={(event) => set(line.id, { account: event.target.value })}
+                    />
                   </td>
                   <td className="admin-kind-column">
                     <select
@@ -144,11 +186,17 @@ export function BudgetEditor({
           </span>
           <span className="label">{changed === 0 ? 'Ei muutoksia' : `${changed} muutettua riviä`}</span>
         </div>
-        <button className="button" disabled={pending || totals.invalid > 0}>
+        <button className="button" disabled={pending || totals.invalid > 0 || duplicated.size > 0}>
           {pending ? 'Tallennetaan…' : 'Tallenna muutokset'}
         </button>
       </div>
 
+      {duplicated.size > 0 && (
+        <p className="notice" role="alert">
+          Sama Kitsas-tili on useammalla rivillä: {[...duplicated].join(', ')}. Tili voi kuulua vain yhdelle riville,
+          muuten sen kirjaukset päätyisivät vain toiselle niistä.
+        </p>
+      )}
       {totals.invalid > 0 && (
         <p className="notice">
           Tarkista {totals.invalid === 1 ? 'korostettu summa' : `${totals.invalid} korostettua summaa`}. Käytä muotoa

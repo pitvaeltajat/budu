@@ -74,6 +74,18 @@ export default async function Home({
         orderBy: { completedAt: 'desc' },
       })
     : null;
+  /**
+   * Money Kitsas holds on accounts this talousarvio maps nothing to. Surfaced
+   * here and not only on /admin because it is the one fault that makes every
+   * figure on this page too low while nothing else looks wrong at all.
+   */
+  const unmapped = budget
+    ? await prisma.kitsasUnmappedAccount.aggregate({
+        where: { budgetId: budget.id },
+        _count: true,
+        _sum: { debetCents: true, kreditCents: true },
+      })
+    : null;
   // A budget imported moments ago has no figures yet; show them as pending
   // rather than as a confident row of zeroes.
   const awaitingKitsas = Boolean(budget) && kitsasIsConfigured() && !lastSync;
@@ -105,6 +117,10 @@ export default async function Home({
           lastFetchedAt={lastSync?.completedAt ?? null}
           awaitingKitsas={awaitingKitsas}
           periods={periods}
+          unmapped={{
+            accounts: unmapped?._count ?? 0,
+            cents: (unmapped?._sum.debetCents ?? 0) + (unmapped?._sum.kreditCents ?? 0),
+          }}
         />
       ) : (
         <Setup admin={admin} />
@@ -244,6 +260,7 @@ function Dashboard({
   lastFetchedAt,
   awaitingKitsas,
   periods,
+  unmapped,
 }: {
   budget: DashboardBudget;
   entries: Entry[];
@@ -252,6 +269,7 @@ function Dashboard({
   lastFetchedAt: Date | null;
   awaitingKitsas: boolean;
   periods: Period[];
+  unmapped: { accounts: number; cents: number };
 }) {
   const now = new Date();
   const periodStart = budget.startsOn || new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
@@ -394,6 +412,17 @@ function Dashboard({
           : 'Kuluva kausi verrattuna viime vuoden vastaavaan ajankohtaan.'}
       </p>
       {!configured && <p className="notice">Kitsasta ei ole vielä yhdistetty. Mitään tietoja ei haeta ulkopuolelta.</p>}
+      {unmapped.accounts > 0 && (
+        <p className="notice">
+          Kitsaassa on {money(unmapped.cents, budget.currency)} kirjauksia {unmapped.accounts} tilillä, joita tämä
+          talousarvio ei tunne, eivätkä ne näy alla olevissa luvuissa.{' '}
+          {admin ? (
+            <Link href="/admin">Korjaa tilikartta ylläpidossa.</Link>
+          ) : (
+            'Pyydä ylläpitäjää korjaamaan tilikartta.'
+          )}
+        </p>
+      )}
       {configured && !awaitingKitsas && !previous.length && (
         <p className="notice">
           Vuodelta {priorYear} ei ole kirjauksia Kitsaassa, joten vertailusarake on tyhjä. Se ei tarkoita, ettei rahaa

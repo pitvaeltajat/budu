@@ -6,6 +6,7 @@ import { activeBudgetOrder, activeFirst } from '@/lib/budget';
 import { BudgetEditor } from './budget-editor';
 import { BudgetUpload } from './budget-upload';
 import { OtherBudgets } from './other-budgets';
+import { UnmappedAccounts } from './unmapped-accounts';
 
 const date = (value: Date) => new Intl.DateTimeFormat('fi-FI').format(value);
 
@@ -65,6 +66,14 @@ export default async function AdminPage() {
         select: { id: true, category: true, groupName: true, kitsasAccount: true, plannedCents: true, kind: true },
       })
     : [];
+  // Worst first: what a mapping mistake costs is measured in euros, not in rows.
+  const unmapped = active
+    ? await prisma.kitsasUnmappedAccount.findMany({
+        where: { budgetId: active.id },
+        orderBy: [{ debetCents: 'desc' }, { kreditCents: 'desc' }],
+        select: { account: true, name: true, entries: true, debetCents: true, kreditCents: true },
+      })
+    : [];
 
   return shell(
     <>
@@ -86,6 +95,8 @@ export default async function AdminPage() {
           <p className="label">Tuo talousarvio alta, niin se tulee näkyviin kaikille.</p>
         </div>
       )}
+
+      {active && <UnmappedAccounts accounts={unmapped} currency={active.currency} />}
 
       <BudgetUpload replacing={active?.name ?? null} />
       {previous.length > 0 && (
