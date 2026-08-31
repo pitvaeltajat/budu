@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { auth, isAdminEmail } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { activeBudgetOrder } from '@/lib/budget';
+import { activeBudgetOrder, activeFirst } from '@/lib/budget';
 import { BudgetEditor } from './budget-editor';
 import { BudgetUpload } from './budget-upload';
 import { OtherBudgets } from './other-budgets';
@@ -55,7 +55,9 @@ export default async function AdminPage() {
       _count: { select: { lines: true } },
     },
   });
-  const [active, ...previous] = budgets;
+  // The dashboard opens on the live period, so the admin page must edit that
+  // same one rather than whatever was uploaded last.
+  const [active, ...previous] = activeFirst(budgets);
   const lines = active
     ? await prisma.budgetLine.findMany({
         where: { budgetId: active.id },

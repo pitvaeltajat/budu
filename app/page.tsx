@@ -1,6 +1,6 @@
 import { auth, isAdminEmail, signOut } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { activeBudgetOrder } from '@/lib/budget';
+import { activeBudgetOrder, activeFirst } from '@/lib/budget';
 import { realizedCents } from '@/lib/realized';
 import { kitsasIsConfigured } from '@/lib/kitsas';
 import { redirect } from 'next/navigation';
@@ -19,15 +19,35 @@ const date = (value: Date) => new Intl.DateTimeFormat('fi-FI').format(value);
 const dateTime = (value: Date) =>
   new Intl.DateTimeFormat('fi-FI', { dateStyle: 'short', timeStyle: 'short' }).format(value);
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
   const admin = isAdminEmail(session.user.email);
-  // The one shared talousarvio; see lib/budget.ts for why this is not scoped to the viewer.
-  const budget = await prisma.budget.findFirst({
-    orderBy: activeBudgetOrder,
-    include: { lines: { orderBy: { sortOrder: 'asc' } } },
-  });
+  /**
+   * The shared talousarviot, live period first; see lib/budget.ts for why this
+   * is not scoped to the viewer. `?talousarvio=` opens a closed year instead of
+   * the live one — everything below reads the budget's own period, so a past
+   * year brings its own comparison year with it and needs no special casing.
+   */
+  const periods = activeFirst(
+    await prisma.budget.findMany({
+      orderBy: activeBudgetOrder,
+      select: { id: true, name: true, startsOn: true, endsOn: true, updatedAt: true },
+    }),
+  );
+  const requested = (await searchParams).talousarvio;
+  const selectedId =
+    (typeof requested === 'string' && periods.find((period) => period.id === requested)?.id) || periods[0]?.id;
+  const budget = selectedId
+    ? await prisma.budget.findUnique({
+        where: { id: selectedId },
+        include: { lines: { orderBy: { sortOrder: 'asc' } } },
+      })
+    : null;
   /**
    * Bookings are joined by account rather than carried on the budget, so this
    * fetches the two periods the dashboard compares and lets the render decide
@@ -84,6 +104,7 @@ export default async function Home() {
           configured={kitsasIsConfigured()}
           lastFetchedAt={lastSync?.completedAt ?? null}
           awaitingKitsas={awaitingKitsas}
+          periods={periods}
         />
       ) : (
         <Setup admin={admin} />
@@ -181,6 +202,39 @@ const DAY = 86_400_000;
 type DashboardBudget = Prisma.BudgetGetPayload<{ include: { lines: true } }>;
 type DashboardLine = DashboardBudget['lines'][number];
 type Entry = Prisma.KitsasEntryGetPayload<object>;
+type Period = { id: string; name: string; startsOn: Date | null; endsOn: Date | null; updatedAt: Date };
+
+/** A budget's own year, which is how people refer to a talousarvio. */
+const periodYear = (period: { startsOn: Date | null }) => period.startsOn?.getUTCFullYear() ?? null;
+
+/**
+ * Switches between the imported talousarviot. Plain links rather than a select:
+ * the page is server-rendered, so each period is its own address that can be
+ * linked to and opened in a tab, and no client JavaScript is needed to change
+ * years.
+ */
+function PeriodSwitcher({ periods, selectedId }: { periods: Period[]; selectedId: string }) {
+  if (periods.length < 2) return null;
+  return (
+    <nav className="periods" aria-label="Talousarviokausi">
+      {periods.map((period) => {
+        const current = period.id === selectedId;
+        const year = periodYear(period);
+        return (
+          <Link
+            key={period.id}
+            href={period.id === periods[0]?.id ? '/' : `/?talousarvio=${period.id}`}
+            className={`period${current ? ' period-current' : ''}`}
+            aria-current={current ? 'page' : undefined}
+            title={period.name}
+          >
+            {year ?? period.name}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
 
 function Dashboard({
   budget,
@@ -189,6 +243,7 @@ function Dashboard({
   configured,
   lastFetchedAt,
   awaitingKitsas,
+  periods,
 }: {
   budget: DashboardBudget;
   entries: Entry[];
@@ -196,6 +251,7 @@ function Dashboard({
   configured: boolean;
   lastFetchedAt: Date | null;
   awaitingKitsas: boolean;
+  periods: Period[];
 }) {
   const now = new Date();
   const periodStart = budget.startsOn || new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
@@ -207,6 +263,15 @@ function Dashboard({
   previousFullEnd.setUTCFullYear(previousFullEnd.getUTCFullYear() - 1);
   const previousEnd = new Date(periodEnd);
   previousEnd.setUTCFullYear(previousEnd.getUTCFullYear() - 1);
+  /**
+   * A period that has ended is not "so far this year": its figures are final,
+   * and `periodEnd` above has already clamped to the budget's own end, so the
+   * comparison is the whole of the year before rather than the same date in it.
+   * A budget with no period at all — the simple category/planned import — is
+   * never closed, because nothing says it has ended.
+   */
+  const closed = Boolean(budget.endsOn && budget.endsOn < now);
+  const priorYear = previousStart.getUTCFullYear();
   const current = entries.filter((item) => item.occurredOn >= periodStart && item.occurredOn <= periodEnd);
   // The table compares like-for-like; the chart wants the completed year.
   const previous = entries.filter((item) => item.occurredOn >= previousStart && item.occurredOn <= previousEnd);
@@ -300,6 +365,16 @@ function Dashboard({
       attachments: attachmentsOf(item.rawPayload),
     }))
     .filter((row) => row.amountCents > 0);
+  /**
+   * The newest booking Kitsas actually holds, which is not the same thing as
+   * when Budu last fetched. The Holvi import into Kitsas is run by hand, so the
+   * book itself can be months behind while every sync reports success — and a
+   * dashboard that only says when it fetched makes that look like underspending.
+   */
+  const newestBooking = current.reduce<Date | null>(
+    (latest, item) => (!latest || item.occurredOn > latest ? item.occurredOn : latest),
+    null,
+  );
   const pace = summarisePace({
     lines: budget.lines,
     usedByCategory: byCategory,
@@ -310,10 +385,21 @@ function Dashboard({
   });
   return (
     <>
-      <p className="eyebrow">Nykyinen talousarvio</p>
+      <p className="eyebrow">{closed ? 'Päättynyt talousarvio' : 'Nykyinen talousarvio'}</p>
       <h1>{budget.name}</h1>
-      <p className="lede">Kuluva kausi verrattuna viime vuoden vastaavaan ajankohtaan.</p>
+      <PeriodSwitcher periods={periods} selectedId={budget.id} />
+      <p className="lede">
+        {closed
+          ? `Koko kausi verrattuna vuoteen ${priorYear}.`
+          : 'Kuluva kausi verrattuna viime vuoden vastaavaan ajankohtaan.'}
+      </p>
       {!configured && <p className="notice">Kitsasta ei ole vielä yhdistetty. Mitään tietoja ei haeta ulkopuolelta.</p>}
+      {configured && !awaitingKitsas && !previous.length && (
+        <p className="notice">
+          Vuodelta {priorYear} ei ole kirjauksia Kitsaassa, joten vertailusarake on tyhjä. Se ei tarkoita, ettei rahaa
+          olisi liikkunut — kirjanpito on aloitettu Kitsaassa myöhemmin.
+        </p>
+      )}
       <section className="summary">
         <div className="card">
           <span className="label">Menoarvio</span>
@@ -352,6 +438,7 @@ function Dashboard({
         ) : (
           <p className="label">
             {lastFetchedAt ? `Haettu Kitsaasta ${dateTime(lastFetchedAt)}.` : 'Kitsaasta ei ole vielä haettu tietoja.'}{' '}
+            {newestBooking && `Uusin kirjaus Kitsaassa ${date(newestBooking)}. `}
             Tiedot päivittyvät kerran vuorokaudessa.
           </p>
         )}
@@ -360,15 +447,15 @@ function Dashboard({
         <div className="card">
           <div className="section-head">
             <h2>Talousarvion kohdat</h2>
-            <span className="label">kuluva / viime vuosi</span>
+            <span className="label">{closed ? `kausi / ${priorYear}` : 'kuluva / viime vuosi'}</span>
           </div>
           <table>
             <thead>
               <tr>
                 <th>Kohta</th>
                 <th className="right">Arvio</th>
-                <th className="right">Tänä vuonna</th>
-                <th className="right">Viime vuonna</th>
+                <th className="right">{closed ? 'Kaudella' : 'Tänä vuonna'}</th>
+                <th className="right">{closed ? `Vuonna ${priorYear}` : 'Viime vuonna'}</th>
                 <th className="right">Jäljellä</th>
               </tr>
             </thead>
@@ -426,7 +513,7 @@ function Dashboard({
         <div className="card">
           <div className="section-head">
             <h2>Viimeisimmät menot</h2>
-            <span className="label">kuluva kausi</span>
+            <span className="label">{closed ? 'koko kausi' : 'kuluva kausi'}</span>
           </div>
           {recentExpenses.length ? (
             <table>
@@ -451,7 +538,11 @@ function Dashboard({
               <Pending wide />
             </div>
           ) : (
-            <div className="empty">Kuluvalle kaudelle ei ole vielä haettu toteutuneita menoja Kitsaasta.</div>
+            <div className="empty">
+              {closed
+                ? 'Tälle kaudelle ei ole kirjauksia Kitsaassa talousarvion tileillä.'
+                : 'Kuluvalle kaudelle ei ole vielä haettu toteutuneita menoja Kitsaasta.'}
+            </div>
           )}
         </div>
       </section>

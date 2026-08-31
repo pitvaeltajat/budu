@@ -124,6 +124,36 @@ h2 {
   margin: 0;
   color: var(--muted-foreground);
 }
+/* Talousarviokaudet: the year tabs above the lede. */
+.periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.period {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+.period:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  text-decoration: none;
+}
+.period-current {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--card);
+}
+.period-current:hover {
+  color: var(--card);
+}
 .card {
   background: var(--card);
   border: 1px solid var(--border);

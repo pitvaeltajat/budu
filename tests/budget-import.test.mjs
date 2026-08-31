@@ -58,6 +58,7 @@ test('Talousarvio rows retain tilinumero as the Kitsas account mapping', async (
   assert.deepEqual(result.lines[0], {
     category: '3010 — Retkituotot',
     description: 'Retkituotot',
+    groupName: 'Varsinaisen toiminnan tuotot',
     kitsasAccount: 3010,
     plannedCents: 400000,
     kind: 'INCOME',
@@ -65,6 +66,7 @@ test('Talousarvio rows retain tilinumero as the Kitsas account mapping', async (
   assert.deepEqual(result.lines[1], {
     category: '4210 — Retkikulut',
     description: 'Retkikulut',
+    groupName: 'Varsinaisen toiminnan kulut',
     kitsasAccount: 4210,
     plannedCents: 400000,
     kind: 'EXPENSE',
@@ -81,9 +83,18 @@ test('Talousarvio uses income account ranges beyond 3000', async () => {
     ['', '8825', 'Lahjoitukset', '', '100'],
     ['', '4210', 'Retkikulut', '', '4000'],
   ]);
+  // Rows come out in section order, not sheet order, so the expense account
+  // leads: Varsinaisen toiminnan kulut sits above Kammin, Varainhankinnan,
+  // Satunnaiset erät and Avustukset in BUDGET_SECTIONS.
   assert.deepEqual(
-    result.lines.map(({ kind }) => kind),
-    ['INCOME', 'INCOME', 'INCOME', 'INCOME', 'EXPENSE'],
+    result.lines.map(({ kitsasAccount, kind }) => [kitsasAccount, kind]),
+    [
+      [4210, 'EXPENSE'],
+      [3500, 'INCOME'],
+      [5010, 'INCOME'],
+      [8825, 'INCOME'],
+      [7510, 'INCOME'],
+    ],
   );
 });
 

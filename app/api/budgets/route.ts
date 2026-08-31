@@ -1,11 +1,12 @@
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { activeBudgetOrder } from '@/lib/budget';
+import { activeBudgetOrder, activeFirst } from '@/lib/budget';
 
 /**
- * Lists every budget, newest first, with enough detail to tell them apart. The
- * first entry is the active one. Budgets are shared across the organisation, so
- * this is not scoped to the caller; see lib/budget.ts.
+ * Lists every budget with enough detail to tell them apart, live period first
+ * and then by period, newest first — the same order the dashboard's period
+ * switcher shows. Budgets are shared across the organisation, so this is not
+ * scoped to the caller; see lib/budget.ts.
  */
 export async function GET() {
   const session = await auth();
@@ -22,5 +23,5 @@ export async function GET() {
       _count: { select: { lines: true } },
     },
   });
-  return Response.json({ budgets });
+  return Response.json({ budgets: activeFirst(budgets) });
 }

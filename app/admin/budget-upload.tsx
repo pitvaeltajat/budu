@@ -61,6 +61,14 @@ export function BudgetUpload({ replacing }: { replacing: string | null }) {
         <label htmlFor="budget-import-name">Nimi (vapaaehtoinen)</label>
         <input id="budget-import-name" name="name" placeholder="Talousarvio 2026" />
       </div>
+      <div className="form-row">
+        <label htmlFor="budget-import-year">Vuosi (vapaaehtoinen)</label>
+        <input id="budget-import-year" name="year" inputMode="numeric" pattern="20[0-9]{2}" placeholder="2025" />
+      </div>
+      <p className="label">
+        Talousarviopohjassa on useamman vuoden sarakkeet. Tyhjänä tuodaan uusin vuosi; anna vuosi, jos haluat tuoda
+        päättyneen kauden vertailtavaksi.
+      </p>
       {error && (
         <p className="notice" role="alert">
           {error}

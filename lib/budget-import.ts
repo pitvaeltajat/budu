@@ -1,4 +1,6 @@
-import { sectionForAccount, sectionSortKey } from './budget-sections';
+// Extension included so `node --test` can import this module directly; tsconfig
+// sets allowImportingTsExtensions for exactly this.
+import { sectionForAccount, sectionSortKey } from './budget-sections.ts';
 
 export type BudgetImportLine = {
   category: string;
@@ -101,15 +103,53 @@ function parseSimpleBudget(records: RecordRow[], submittedName: string): ParsedB
   };
 }
 
-/** Parse the Finnish multi-year Talousarvio export, selecting its rightmost year column. */
-function parseTalousarvio(rows: unknown[][], submittedName: string): ParsedBudget {
+/**
+ * The year columns a Talousarvio sheet carries. The export puts several years
+ * side by side, so which one is "the budget" is a choice rather than a given —
+ * the rightmost is only the usual answer, not the only one.
+ */
+function yearColumns(rows: unknown[][]) {
   const yearRow = rows.find((row) => row.some((value) => /^20\d{2}$/.test(text(value))));
   if (!yearRow) throw new Error('Could not find a year row in the Talousarvio file.');
-  const years = yearRow
+  return yearRow
     .map((value, index) => ({ year: Number(text(value)), index }))
     .filter(({ year }) => Number.isInteger(year) && year >= 2000);
-  const selected = years.at(-1);
-  if (!selected) throw new Error('Could not find a budget-year column.');
+}
+
+/**
+ * Years this file could be imported as, oldest first and without repeats.
+ * Empty for the simple category/planned format, which carries no year of its own.
+ */
+export function talousarvioYears(rows: unknown[][]): number[] {
+  if (simpleHeaderRow(rows)) return [];
+  try {
+    return [...new Set(yearColumns(rows).map((column) => column.year))];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Parse the Finnish multi-year Talousarvio export. `year` picks which column to
+ * import, defaulting to the rightmost — that is what makes an earlier year
+ * importable from the same file the current one came from.
+ *
+ * A year can appear twice: the sheet puts that year's plan next to how it
+ * actually turned out. The **first** of the two is the plan, which is what a
+ * talousarvio is, so matching takes the leftmost column for the year rather than
+ * the last one. Taking the last would silently import the outturn as the budget.
+ */
+function parseTalousarvio(rows: unknown[][], submittedName: string, year?: number): ParsedBudget {
+  const years = yearColumns(rows);
+  const selected = year === undefined ? years.at(-1) : years.find((column) => column.year === year);
+  if (!selected) {
+    const offered = years.map((column) => column.year).join(', ');
+    throw new Error(
+      year === undefined
+        ? 'Could not find a budget-year column.'
+        : `The file has no ${year} column. It offers: ${offered || 'none'}.`,
+    );
+  }
   const lines: BudgetImportLine[] = [];
   for (const row of rows) {
     const account = Number(text(row[1]));
@@ -144,16 +184,24 @@ function parseTalousarvio(rows: unknown[][], submittedName: string): ParsedBudge
   };
 }
 
-export function parseBudgetWorksheet(rows: unknown[][], submittedName = ''): ParsedBudget {
+/** The header row of the simple category/planned format, or null for a Talousarvio sheet. */
+function simpleHeaderRow(rows: unknown[][]) {
   const firstNonEmpty = rows.find((row) => row.some((value) => text(value)));
-  const hasSimpleHeaders = firstNonEmpty?.some((value) => ['category', 'planned'].includes(normalized(text(value))));
-  if (hasSimpleHeaders) {
-    const headers = firstNonEmpty!.map(text);
-    const index = rows.indexOf(firstNonEmpty!);
+  if (!firstNonEmpty) return null;
+  return firstNonEmpty.some((value) => ['category', 'planned'].includes(normalized(text(value))))
+    ? firstNonEmpty
+    : null;
+}
+
+export function parseBudgetWorksheet(rows: unknown[][], submittedName = '', year?: number): ParsedBudget {
+  const headerRow = simpleHeaderRow(rows);
+  if (headerRow) {
+    const headers = headerRow.map(text);
+    const index = rows.indexOf(headerRow);
     const records = rows
       .slice(index + 1)
       .map((row) => Object.fromEntries(headers.map((header, column) => [header, row[column] ?? ''])));
     return parseSimpleBudget(records, submittedName);
   }
-  return parseTalousarvio(rows, submittedName);
+  return parseTalousarvio(rows, submittedName, year);
 }

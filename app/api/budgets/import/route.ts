@@ -23,7 +23,15 @@ export async function POST(request: Request) {
     if (!sheet) throw new Error('The workbook has no worksheet.');
     const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
     const submittedName = String(form.get('name') ?? '').trim();
-    const parsed = parseBudgetWorksheet(rows, submittedName);
+    /**
+     * Which year column to import. Left blank the newest one wins, which is the
+     * behaviour every existing import had; naming a year is what lets a closed
+     * year be brought in from the same file for comparison.
+     */
+    const submittedYear = String(form.get('year') ?? '').trim();
+    if (submittedYear && !/^20\d{2}$/.test(submittedYear))
+      return Response.json({ error: 'Vuoden on oltava nelinumeroinen, esimerkiksi 2025.' }, { status: 400 });
+    const parsed = parseBudgetWorksheet(rows, submittedName, submittedYear ? Number(submittedYear) : undefined);
     const budget = await prisma.budget.create({
       data: {
         name: parsed.name,
