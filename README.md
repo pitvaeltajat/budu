@@ -88,7 +88,7 @@ Note that voucher detail is an N+1 fetch: one request per voucher in the range. 
 
 ### Scheduled sync
 
-`vercel.json` runs two crons, both daily because Hobby plans reject anything more frequent at deploy time: a full sync at 03:30 and an incremental pass at 15:00. Both hit `GET /api/cron/kitsas`, which requires `Authorization: Bearer $CRON_SECRET` and refuses to run at all when `CRON_SECRET` is unset, rather than quietly running unauthenticated against an external service.
+`vercel.json` runs two crons, both daily because Hobby plans reject anything more frequent at deploy time: an incremental pass at 03:30 Monday to Saturday, and a full sync at 03:30 on Sunday. Both hit `GET /api/cron/kitsas`, which requires `Authorization: Bearer $CRON_SECRET` and refuses to run at all when `CRON_SECRET` is unset, rather than quietly running unauthenticated against an external service.
 
 Rotating `CRON_SECRET` requires a **fresh build**, not `vercel redeploy`. Vercel sends the project's current value when it triggers a cron, but the function compares against the value snapshotted into its deployment at build time, and `redeploy` reuses that snapshot. Change the secret without rebuilding and every cron run fails with `Unauthorized` while the variable looks correct in the dashboard.
 
