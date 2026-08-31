@@ -58,15 +58,17 @@ The integration makes only `GET` requests to the legacy voucher endpoints:
 
 - `GET /tositteet?alkupvm=…&loppupvm=…`
 - `GET /tositteet/{id}`
+- `GET /viennit?alkupvm=…&loppupvm=…`
+- `GET /liitteet?alkupvm=…&loppupvm=…`
 
 It has no methods capable of posting, editing, or deleting anything in Kitsas. Budu stores its own copy of the matched voucher entries in PostgreSQL, both sides of each.
 
 Kitsas exposes two hosts, and they are not interchangeable:
 
-| Host                                                   | Variables                                                      | Serves                                               |
-| ------------------------------------------------------ | -------------------------------------------------------------- | ---------------------------------------------------- |
-| KitsasHub (`api.kitsas.fi`, test `test-api.kitsas.fi`) | `KITSAS_HUB_*`                                                 | Login, books, accounts, dimensions, fiscal years     |
-| Legacy per-book cloud backend                          | resolved at runtime; `KITSAS_CLOUD_ID`, `KITSAS_EXPENSES_PATH` | `GET /init`, `GET /tositteet`, `GET /tositteet/{id}` |
+| Host                                                   | Variables                                                      | Serves                                                                |
+| ------------------------------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------- |
+| KitsasHub (`api.kitsas.fi`, test `test-api.kitsas.fi`) | `KITSAS_HUB_*`                                                 | Login, books, accounts, dimensions, fiscal years                      |
+| Legacy per-book cloud backend                          | resolved at runtime; `KITSAS_CLOUD_ID`, `KITSAS_EXPENSES_PATH` | `GET /init`, `/tositteet`, `/tositteet/{id}`, `/viennit`, `/liitteet` |
 
 The documented Hub API has no voucher read endpoint — only `POST /v1/vouchers`, which Budu never calls. Realized-expense ingestion therefore uses the legacy cloud backend, which Kitsas confirmed is alive and usable.
 
@@ -90,7 +92,23 @@ Confirmed against a test book on 2026-08-24, and against the live book on 2026-0
 
 Amounts arriving as strings is why `asNumber` in the sync route parses rather than casts. A debit-side entry has no `kredit` key at all, so the unused side parses as `NaN` and is recorded as zero. What keeps the bank contra entry out of the totals is the account filter: 1900 is not a budget account, so no line maps to it and it is never stored.
 
-Note that voucher detail is an N+1 fetch: one request per voucher in the range. That is fine for an association's books and would need batching for a larger one.
+### The sync reads in bulk, not voucher by voucher
+
+`GET /tositteet/{id}` is **not** how the sync gets its entries, and calling it once per voucher was the whole cost of a sync: 1306 requests for a year of this book, 121 seconds. Two bulk endpoints replace it, so a range costs three requests no matter how many vouchers it holds.
+
+| Endpoint                              | Returns                                                            | Measured on 2025      |
+| ------------------------------------- | ------------------------------------------------------------------ | --------------------- |
+| `GET /tositteet?alkupvm=…&loppupvm=…` | list items, for the change signatures and each voucher's `otsikko` | 1305 vouchers         |
+| `GET /viennit?alkupvm=…&loppupvm=…`   | **every entry**, each carrying its voucher as `tosite`             | 2841 entries, 1775 ms |
+| `GET /liitteet?alkupvm=…&loppupvm=…`  | every attachment                                                   | 1001 files, 137 ms    |
+
+`/viennit` entries carry `tili`, `debet`/`kredit`, `pvm`, `selite` and `tosite: {id, pvm, sarja, tunniste, liitteita}` — everything `KitsasEntry` stores except the attachment metadata.
+
+Attachments are the catch: `/liitteet` gives no voucher id, only `(pvm, sarja, tunniste)`, so `lib/kitsas-vouchers.ts` matches on that triple. It was checked against the live book before being relied on — **929 of 929** vouchers carrying attachments matched exactly, none disagreed on count, no key was claimed by two vouchers, and the result agreed with `/tositteet/{id}` on every spot check. The whole of 2025 was then rebuilt both ways: **2841 rows each, zero differences**, in 1.4 s against 19.4 s.
+
+A voucher that declares `liitteita: 0` is given no attachments without a lookup, so it cannot inherit a file that happens to share its key.
+
+Writes are batched too. Each entry was its own upsert — a round trip to a database in another data centre, some two thousand per sync — and they now go in transactions of 250.
 
 ### Scheduled sync
 
@@ -100,7 +118,7 @@ Rotating `CRON_SECRET` requires a **fresh build**, not `vercel redeploy`. Vercel
 
 The incremental pass diffs the cheap list endpoint against `KitsasVoucherState` and fetches detail only for vouchers whose total, date, or title moved. An edit that leaves all three untouched is invisible to it, which is what the full sync is for. Only the full sync prunes deleted vouchers: an incremental run sees one slice of the book and cannot conclude from that alone that a voucher is gone.
 
-`POST /api/kitsas/sync`, which the dashboard calls for a budget with no completed sync yet, answers with **newline-delimited JSON** rather than a single object. Voucher detail is an N+1 fetch, so a full sync of this book is well over a thousand reads, and a request that says nothing for a minute cannot be told apart from one that has hung. Each line is one event — `listed`, then `progress` throttled to one every 200 ms, then `done` or `error` — and the page counts vouchers as they land. A failure after the first line arrives as an `error` event, not an HTTP status, because the status line is long gone by then. `lib/ndjson.ts` does the chunk-boundary buffering and is covered by `tests/ndjson.test.ts`.
+`POST /api/kitsas/sync`, which the dashboard calls for a budget with no completed sync yet, answers with **newline-delimited JSON** rather than a single object. Reading from Kitsas is quick now, but writing a year of entries is not instant, and a request that says nothing cannot be told apart from one that has hung. Each line is one event — `listed`, then `progress` throttled to one every 200 ms, then `done` or `error` — and the page counts rows as they are written. A failure after the first line arrives as an `error` event, not an HTTP status, because the status line is long gone by then. `lib/ndjson.ts` does the chunk-boundary buffering and is covered by `tests/ndjson.test.ts`.
 
 ### Attachments
 

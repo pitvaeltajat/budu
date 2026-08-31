@@ -1,6 +1,13 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { getKitsasExpenses, getKitsasInit, getKitsasVoucher, kitsasIsConfigured } from '@/lib/kitsas';
+import {
+  getKitsasAttachments,
+  getKitsasEntries,
+  getKitsasExpenses,
+  getKitsasInit,
+  kitsasIsConfigured,
+} from '@/lib/kitsas';
+import { vouchersFromEntries, type BulkVoucher } from '@/lib/kitsas-vouchers';
 
 /**
  * Kitsas offers no modified-since filter and no change feed — `muokattu` is
@@ -22,7 +29,7 @@ export type SyncOutcome = {
   listed: number;
   /** Vouchers whose list signature moved. */
   changed: number;
-  /** Voucher details actually requested from Kitsas, after the shared cache. */
+  /** Ranges actually read from Kitsas, after the shared cache. Three requests each. */
   fetched: number;
   imported: number;
   pruned: number;
@@ -40,7 +47,6 @@ type VoucherEntry = {
   debet?: unknown;
   kredit?: unknown;
 };
-type Voucher = { id?: unknown; pvm?: unknown; otsikko?: unknown; viennit?: unknown; liitteet?: unknown };
 export type StoredAttachment = { id: number; name: string; type: string };
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -85,21 +91,6 @@ async function accountNames(): Promise<Map<number, string>> {
   }
 }
 
-/** Detail fetches are the expensive part; a small pool keeps Kitsas from being hammered. */
-async function mapPool<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let cursor = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (cursor < items.length) {
-        const index = cursor++;
-        results[index] = await worker(items[index]);
-      }
-    }),
-  );
-  return results;
-}
-
 /**
  * Shifting a date by a year lands on Mar 1 when the source is Feb 29, so pin the
  * day-of-month back afterwards and let the month clamp instead.
@@ -131,19 +122,35 @@ export function syncRanges(startsOn: Date | null, endsOn: Date | null, now: Date
 }
 
 /**
- * Voucher detail shared across budgets in one run. Every budget reads the same
- * Kitsas book, so fetching a voucher once per budget would multiply the load on
- * their server by the number of budgets for no new information.
+ * One range's rebuilt vouchers, shared across budgets in a single run and keyed
+ * by the range they came from. Every budget reads the same book, so two budgets
+ * covering the same year would otherwise ask Kitsas for it twice.
  */
-export type VoucherCache = Map<number, unknown>;
+export type VoucherCache = Map<string, Map<number, BulkVoucher>>;
+
+const rangeKey = (range: { from: string; to: string }) => `${range.from}|${range.to}`;
 
 /**
- * Progress worth showing while a sync runs. The listing is one or two quick
- * requests; the detail fetches are the part that takes real time, one request
- * per voucher, so that is what a count should be counting.
+ * Progress worth showing while a sync runs. Reading from Kitsas is now three
+ * requests per range rather than one per voucher, so what takes the time is
+ * writing the entries — and that is what the count follows.
  */
 export type SyncProgress =
   { type: 'listed'; listed: number; pending: number } | { type: 'progress'; fetched: number; pending: number };
+
+/**
+ * Writes are batched rather than awaited one at a time. Each upsert was its own
+ * round trip to a database in another data centre, and a year of this book is
+ * some two thousand of them; a batch is one round trip for the lot.
+ */
+const WRITE_BATCH = 250;
+
+async function writeInBatches(operations: Prisma.PrismaPromise<unknown>[], onBatch?: (written: number) => void) {
+  for (let index = 0; index < operations.length; index += WRITE_BATCH) {
+    await prisma.$transaction(operations.slice(index, index + WRITE_BATCH));
+    onBatch?.(Math.min(index + WRITE_BATCH, operations.length));
+  }
+}
 
 export async function syncBudget(
   budgetId: string,
@@ -167,14 +174,18 @@ export async function syncBudget(
   const sync = await prisma.syncRun.create({ data: { budgetId: budget.id, source: 'KITSAS', status: 'RUNNING' } });
 
   try {
-    const listed: { id: number; signature: string }[] = [];
+    const listed: { id: number; otsikko: string; signature: string }[] = [];
     for (const range of ranges) {
       const list = await getKitsasExpenses(range.from, range.to);
       if (!Array.isArray(list)) throw new Error('Kitsas voucher list had an unexpected response shape.');
       for (const raw of list as VoucherListItem[]) {
         const id = asNumber(raw.id);
         if (!Number.isSafeInteger(id)) continue;
-        listed.push({ id, signature: `${asText(raw.summa)}|${asText(raw.pvm)}|${asText(raw.otsikko)}` });
+        listed.push({
+          id,
+          otsikko: asText(raw.otsikko),
+          signature: `${asText(raw.summa)}|${asText(raw.pvm)}|${asText(raw.otsikko)}`,
+        });
       }
     }
     // Both ranges can return the same voucher when a budget period spans a year boundary.
@@ -191,38 +202,49 @@ export async function syncBudget(
 
     let imported = 0;
     let fetchedFromKitsas = 0;
-    /**
-     * Counted separately from `fetchedFromKitsas`: a voucher served from the
-     * shared cache still costs the reader a step, and a progress count that
-     * stalled on cache hits would look like a stuck sync.
-     */
-    let completed = 0;
     /** Accounts seen carrying money that this budget maps nothing to. */
     const unmapped = new Map<number, UnmappedTotals>();
-    await mapPool(pending, 4, async (item) => {
-      let detail = cache?.get(item.id);
-      if (detail === undefined) {
-        detail = await getKitsasVoucher(item.id);
+
+    /**
+     * Every entry for both ranges, in three requests each instead of one per
+     * voucher. Shared across budgets in a run, because two budgets covering the
+     * same year would otherwise ask Kitsas for it twice.
+     */
+    const byVoucher = new Map<number, BulkVoucher>();
+    for (const range of ranges) {
+      const key = rangeKey(range);
+      let rebuilt: Map<number, BulkVoucher> | undefined = cache?.get(key);
+      if (!rebuilt) {
+        const [entries, files] = await Promise.all([
+          getKitsasEntries(range.from, range.to),
+          getKitsasAttachments(range.from, range.to),
+        ]);
+        if (!Array.isArray(entries)) throw new Error('Kitsas entry list had an unexpected response shape.');
+        rebuilt = vouchersFromEntries(entries, files);
         fetchedFromKitsas++;
-        cache?.set(item.id, detail);
+        cache?.set(key, rebuilt);
       }
-      // Counted here rather than after the parse, so a voucher Budu cannot read
-      // still advances the count instead of silently holding it back.
-      onProgress?.({ type: 'progress', fetched: ++completed, pending: pending.length });
-      const voucher = asRecord(detail) as Voucher | null;
-      if (!voucher || !Array.isArray(voucher.viennit)) return;
+      for (const [id, voucher] of rebuilt) byVoucher.set(id, voucher);
+    }
+
+    /** Upserts are collected and written in batches; see writeInBatches. */
+    const writes: Prisma.PrismaPromise<unknown>[] = [];
+    for (const item of pending) {
+      const voucher = byVoucher.get(item.id);
+      // Listed but carrying no entries in the range — nothing to store, and the
+      // voucher state below still records that it was seen.
+      const entries = voucher?.viennit ?? [];
       /**
-       * Attachment metadata rides along with the voucher detail we already
-       * fetch. The bytes stay in Kitsas; only the reference is stored, and it
-       * is served through an authenticated route because the endpoint answers
-       * 403 without the cloud token.
+       * The bytes stay in Kitsas; only the reference is stored, and it is served
+       * through an authenticated route because the endpoint answers 403 without
+       * the cloud token.
        */
-      const attachments: StoredAttachment[] = (Array.isArray(voucher.liitteet) ? voucher.liitteet : [])
-        .map((raw) => asRecord(raw))
+      const attachments: StoredAttachment[] = (voucher?.liitteet ?? ([] as unknown[]))
+        .map((raw: unknown) => asRecord(raw))
         .filter((file): file is Record<string, unknown> => Boolean(file))
         .map((file) => ({ id: asNumber(file.id), name: asText(file.nimi), type: asText(file.tyyppi) }))
         .filter((file) => Number.isSafeInteger(file.id) && file.id > 0);
-      for (const rawEntry of voucher.viennit) {
+      for (const rawEntry of entries) {
         const entry = asRecord(rawEntry) as VoucherEntry | null;
         if (!entry) continue;
         const account = asNumber(entry.tili);
@@ -259,10 +281,11 @@ export async function syncBudget(
         // An entry with neither side carries no figure; that is what keeps the
         // bank contra entry out of the table when it maps to no budget account.
         if (debetCents <= 0 && kreditCents <= 0) continue;
-        const occurredOn =
-          typeof entry.pvm === 'string' ? entry.pvm : typeof voucher.pvm === 'string' ? voucher.pvm : null;
+        const occurredOn = typeof entry.pvm === 'string' ? entry.pvm.slice(0, 10) : voucher?.pvm || null;
         if (!occurredOn || !/^\d{4}-\d{2}-\d{2}$/.test(occurredOn)) continue;
-        const description = asText(entry.selite) || asText(voucher.otsikko) || `Voucher ${item.id}`;
+        // `/viennit` carries no voucher title, so the listing's otsikko — already
+        // held for the signature — is the fallback it used to come from.
+        const description = asText(entry.selite) || item.otsikko || `Voucher ${item.id}`;
         const fields = {
           occurredOn: new Date(`${occurredOn}T00:00:00.000Z`),
           account,
@@ -273,19 +296,28 @@ export async function syncBudget(
           // clear the stored reference rather than leave the old one standing.
           rawPayload: attachments.length ? { attachments } : Prisma.DbNull,
         };
-        await prisma.kitsasEntry.upsert({
-          where: { voucherId_entryId: { voucherId: item.id, entryId } },
-          update: fields,
-          create: { voucherId: item.id, entryId, ...fields },
-        });
+        writes.push(
+          prisma.kitsasEntry.upsert({
+            where: { voucherId_entryId: { voucherId: item.id, entryId } },
+            update: fields,
+            create: { voucherId: item.id, entryId, ...fields },
+          }),
+        );
         imported++;
       }
-      await prisma.kitsasVoucherState.upsert({
-        where: { budgetId_voucherId: { budgetId: budget.id, voucherId: item.id } },
-        update: { signature: item.signature },
-        create: { budgetId: budget.id, voucherId: item.id, signature: item.signature },
-      });
-    });
+      writes.push(
+        prisma.kitsasVoucherState.upsert({
+          where: { budgetId_voucherId: { budgetId: budget.id, voucherId: item.id } },
+          update: { signature: item.signature },
+          create: { budgetId: budget.id, voucherId: item.id, signature: item.signature },
+        }),
+      );
+    }
+
+    await writeInBatches(writes, (written) =>
+      // Reported against the write total, which is now what the wait is made of.
+      onProgress?.({ type: 'progress', fetched: written, pending: writes.length }),
+    );
 
     /**
      * Replaced wholesale rather than upserted: an account that has since been

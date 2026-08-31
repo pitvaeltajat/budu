@@ -54,6 +54,29 @@ export async function getKitsasExpenses(from: string, to: string): Promise<unkno
   return readCloud(await getKitsasCloud(), expensesPath(), { alkupvm: from, loppupvm: to });
 }
 
+/**
+ * Every voucher entry in a date range, in one request.
+ *
+ * This is what makes the sync cheap. `/tositteet/{id}` returns one voucher's
+ * entries and was called once per voucher — 1306 requests for a year of this
+ * association's book. `/viennit` returns the same entries for a whole year in a
+ * single response, each carrying its voucher as `tosite`, so the fetch is a
+ * constant three requests per range rather than one per voucher.
+ */
+export async function getKitsasEntries(from: string, to: string): Promise<unknown> {
+  if (!kitsasIsConfigured()) throw new Error('Kitsas is not configured.');
+  return readCloud(await getKitsasCloud(), '/viennit', { alkupvm: from, loppupvm: to });
+}
+
+/**
+ * Attachment metadata for a date range. Carries no voucher id — only
+ * `(pvm, sarja, tunniste)`, which is what `voucherFileKey` matches on.
+ */
+export async function getKitsasAttachments(from: string, to: string): Promise<unknown> {
+  if (!kitsasIsConfigured()) throw new Error('Kitsas is not configured.');
+  return readCloud(await getKitsasCloud(), '/liitteet', { alkupvm: from, loppupvm: to });
+}
+
 export type KitsasAttachment = { body: ArrayBuffer; contentType: string };
 
 /**
@@ -76,6 +99,11 @@ export async function getKitsasAttachment(id: number): Promise<KitsasAttachment>
   };
 }
 
+/**
+ * One voucher in full. The sync no longer uses this — `/viennit` gives it the
+ * same entries in bulk — but it is the only endpoint that returns a voucher's
+ * own `otsikko`, `kommentit` and `loki`, so it is kept for looking one up.
+ */
 export async function getKitsasVoucher(id: number): Promise<unknown> {
   if (!kitsasIsConfigured()) throw new Error('Kitsas is not configured.');
   if (!Number.isSafeInteger(id) || id < 1) throw new Error('Invalid Kitsas voucher id.');

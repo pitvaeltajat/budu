@@ -14,7 +14,7 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "test:kitsas-mock": "node --test tests/kitsas-library.mock.test.mjs",
-    "test": "node --test tests/budget-sections.test.ts && node --test tests/budget-pace.test.ts && node --test tests/budget-groups.test.ts && node --test tests/budget-active.test.ts && node --test tests/budget-mapping.test.ts && node --test tests/euro-input.test.ts && node --test tests/ndjson.test.ts && node --test tests/realized.test.ts && node --test tests/budget-import.test.mjs && node --test tests/budget-year.test.mjs && node --test tests/kitsas-library.mock.test.mjs",
+    "test": "node --test tests/budget-sections.test.ts && node --test tests/budget-pace.test.ts && node --test tests/budget-groups.test.ts && node --test tests/budget-active.test.ts && node --test tests/budget-mapping.test.ts && node --test tests/euro-input.test.ts && node --test tests/ndjson.test.ts && node --test tests/kitsas-vouchers.test.ts && node --test tests/realized.test.ts && node --test tests/budget-import.test.mjs && node --test tests/budget-year.test.mjs && node --test tests/kitsas-library.mock.test.mjs",
     "test:sections": "node --test tests/budget-sections.test.ts"
   },
   "dependencies": {
