@@ -14,6 +14,7 @@ import { CategoryDetail, type CategoryDetailProps } from './category-detail';
 import { Overview } from './overview';
 import { KitsasPending, Pending } from './kitsas-pending';
 import { PeriodSwitcher, type Period } from './period-switcher';
+import { PitvaMark } from './pitva-logo';
 
 const money = (cents: number, currency = 'EUR') =>
   new Intl.NumberFormat('fi-FI', { style: 'currency', currency }).format(cents / 100);
@@ -95,6 +96,7 @@ export default async function Home({
     <main className="shell">
       <header className="topbar">
         <Link className="brand" href="/">
+          <PitvaMark />
           BUDU
         </Link>
         <div className="user">

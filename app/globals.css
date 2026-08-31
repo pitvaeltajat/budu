@@ -74,6 +74,9 @@ button:hover {
   box-shadow: 0 1px 3px rgb(34 30 93 / 18%);
 }
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   color: inherit;
   font-size: 22px;
   font-weight: 650;
@@ -81,6 +84,15 @@ button:hover {
   line-height: 1;
   text-decoration: none;
   transition: transform 0.15s ease;
+}
+/*
+ * The emblem is line art, and at 26px its strokes land near a single device
+ * pixel; the topbar's near-white on navy is what keeps them from disappearing.
+ * flex-shrink is off because a cramped phone topbar should take its space from
+ * the address, never from the mark.
+ */
+.brand svg {
+  flex: 0 0 auto;
 }
 .brand:hover {
   transform: scale(1.05);
@@ -321,6 +333,12 @@ tr:last-child td {
 }
 .signin h1 {
   margin-top: 16px;
+}
+/* The emblem, at a size where the ring of lettering is actually readable. */
+.signin .card > svg {
+  display: block;
+  margin: 0 auto;
+  color: var(--primary);
 }
 .signin p {
   margin: 12px 0 24px;

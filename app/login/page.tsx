@@ -1,4 +1,5 @@
 import { allowedDomains, auth, devLoginEnabled, signIn } from '@/lib/auth';
+import { PitvaLogo } from '../pitva-logo';
 import { redirect } from 'next/navigation';
 
 /** Falls back to the association's own domain when no allowlist is configured, so the advice is never blank. */
@@ -23,6 +24,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="signin">
       <section className="card">
+        <PitvaLogo title="Pitkäjärven Vaeltajat ry" />
         <h1>Mihin PitVan rahat menevät?</h1>
         <p>
           Kirjaudu lippukunnan {domain}-tilillä, niin näet talousarvion rinnalla sen, mitä kolo, kammi ja retket ovat
