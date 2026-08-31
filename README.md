@@ -96,6 +96,8 @@ Rotating `CRON_SECRET` requires a **fresh build**, not `vercel redeploy`. Vercel
 
 The incremental pass diffs the cheap list endpoint against `KitsasVoucherState` and fetches detail only for vouchers whose total, date, or title moved. An edit that leaves all three untouched is invisible to it, which is what the full sync is for. Only the full sync prunes deleted vouchers: an incremental run sees one slice of the book and cannot conclude from that alone that a voucher is gone.
 
+`POST /api/kitsas/sync`, which the dashboard calls for a budget with no completed sync yet, answers with **newline-delimited JSON** rather than a single object. Voucher detail is an N+1 fetch, so a full sync of this book is well over a thousand reads, and a request that says nothing for a minute cannot be told apart from one that has hung. Each line is one event — `listed`, then `progress` throttled to one every 200 ms, then `done` or `error` — and the page counts vouchers as they land. A failure after the first line arrives as an `error` event, not an HTTP status, because the status line is long gone by then. `lib/ndjson.ts` does the chunk-boundary buffering and is covered by `tests/ndjson.test.ts`.
+
 ### Attachments
 
 Invoice files are retrievable but cannot be linked to directly. Voucher detail carries `liitteet` as `[{id, nimi, tyyppi}]`, `GET /liitteet?alkupvm=…&loppupvm=…` lists them, and `GET /liitteet/{id}` returns the bytes as `image/jpeg`, `image/png`, `application/pdf`, or `text/csv`. That request needs the cloud bearer token and answers 403 without it, so surfacing a file to a browser means proxying it through an authenticated route; putting the token in the page would hand every viewer write access to the books.

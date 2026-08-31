@@ -99,7 +99,20 @@ export function syncRanges(startsOn: Date | null, endsOn: Date | null, now: Date
  */
 export type VoucherCache = Map<number, unknown>;
 
-export async function syncBudget(budgetId: string, mode: SyncMode, cache?: VoucherCache): Promise<SyncOutcome> {
+/**
+ * Progress worth showing while a sync runs. The listing is one or two quick
+ * requests; the detail fetches are the part that takes real time, one request
+ * per voucher, so that is what a count should be counting.
+ */
+export type SyncProgress =
+  { type: 'listed'; listed: number; pending: number } | { type: 'progress'; fetched: number; pending: number };
+
+export async function syncBudget(
+  budgetId: string,
+  mode: SyncMode,
+  cache?: VoucherCache,
+  onProgress?: (progress: SyncProgress) => void,
+): Promise<SyncOutcome> {
   if (!kitsasIsConfigured()) throw new Error('Kitsas has not been configured.');
   const startedAt = Date.now();
   const budget = await prisma.budget.findUnique({ where: { id: budgetId }, include: { lines: true } });
@@ -136,9 +149,16 @@ export async function syncBudget(budgetId: string, mode: SyncMode, cache?: Vouch
       ]),
     );
     const pending = [...unique.values()].filter((item) => mode === 'full' || known.get(item.id) !== item.signature);
+    onProgress?.({ type: 'listed', listed: unique.size, pending: pending.length });
 
     let imported = 0;
     let fetchedFromKitsas = 0;
+    /**
+     * Counted separately from `fetchedFromKitsas`: a voucher served from the
+     * shared cache still costs the reader a step, and a progress count that
+     * stalled on cache hits would look like a stuck sync.
+     */
+    let completed = 0;
     await mapPool(pending, 4, async (item) => {
       let detail = cache?.get(item.id);
       if (detail === undefined) {
@@ -146,6 +166,9 @@ export async function syncBudget(budgetId: string, mode: SyncMode, cache?: Vouch
         fetchedFromKitsas++;
         cache?.set(item.id, detail);
       }
+      // Counted here rather than after the parse, so a voucher Budu cannot read
+      // still advances the count instead of silently holding it back.
+      onProgress?.({ type: 'progress', fetched: ++completed, pending: pending.length });
       const voucher = asRecord(detail) as Voucher | null;
       if (!voucher || !Array.isArray(voucher.viennit)) return;
       /**
