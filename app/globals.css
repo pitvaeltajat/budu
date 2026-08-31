@@ -476,6 +476,21 @@ select:focus-visible {
 .group-row:first-child th {
   padding-top: 6px;
 }
+/* A section's own total, closing the run of rows above it. */
+.total-row td {
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+  color: var(--foreground);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.total-row td:first-child {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
 @keyframes budu-pulse {
   0%,
   100% {

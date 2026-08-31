@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { Fragment } from 'react';
 import type { Prisma } from '@prisma/client';
 import { summarisePace } from '@/lib/budget-pace';
+import { sectionsOf, worthTotalling } from '@/lib/budget-groups';
 import { AttachmentLinks } from './attachment-links';
 import { CategoryDetail } from './category-detail';
 import { Overview } from './overview';
@@ -361,6 +362,8 @@ function Dashboard({
     (latest, item) => (!latest || item.occurredOn > latest ? item.occurredOn : latest),
     null,
   );
+  /** The table's sections, each carrying its own totals; see lib/budget-groups.ts. */
+  const sections = sectionsOf(budget.lines, byCategory, previousByCategory);
   const pace = summarisePace({
     lines: budget.lines,
     usedByCategory: byCategory,
@@ -459,53 +462,79 @@ function Dashboard({
               </tr>
             </thead>
             <tbody>
-              {budget.lines.map((line, index) => {
-                const used = byCategory.get(line.category) || 0;
-                const prior = previousByCategory.get(line.category) || 0;
-                const heading =
-                  line.groupName && line.groupName !== budget.lines[index - 1]?.groupName ? line.groupName : null;
-                const status = awaitingKitsas ? null : rowStatus(line.kind, line.plannedCents, used, prior);
-                return (
-                  <Fragment key={line.id}>
-                    {heading && (
-                      <tr className="group-row">
-                        <th colSpan={5} scope="colgroup">
-                          {heading}
-                        </th>
-                      </tr>
-                    )}
-                    <tr>
-                      <td>
-                        <CategoryDetail
-                          category={line.category}
-                          kind={line.kind}
-                          account={line.kitsasAccount}
-                          currency={budget.currency}
-                          plannedCents={line.plannedCents}
-                          periodStart={iso(periodStart)}
-                          periodEnd={iso(fullPeriodEnd)}
-                          todayIso={iso(periodEnd)}
-                          previousStart={iso(previousStart)}
-                          current={itemsFor(current, line)}
-                          previous={itemsFor(previousFull, line)}
-                        />
-                        <br />
-                        <span className="label">
-                          {line.kind === 'INCOME' ? 'Tulo' : 'Meno'}
-                          {line.kitsasAccount ? ` · tili ${line.kitsasAccount}` : ''}
-                        </span>
-                        {status && <span className={`badge badge-${status.tone}`}>{status.label}</span>}
-                      </td>
-                      <td className="right">{money(line.plannedCents, budget.currency)}</td>
-                      <td className="right">{awaitingKitsas ? <Pending /> : money(used, budget.currency)}</td>
-                      <td className="right">{awaitingKitsas ? <Pending /> : money(prior, budget.currency)}</td>
-                      <td className={`right${status?.tone === 'over' ? ' negative' : ''}`}>
-                        {awaitingKitsas ? <Pending /> : money(line.plannedCents - used, budget.currency)}
-                      </td>
+              {sections.map((section) => (
+                <Fragment key={section.name ?? 'ryhmittelemattomat'}>
+                  {section.name && (
+                    <tr className="group-row">
+                      <th colSpan={5} scope="colgroup">
+                        {section.name}
+                      </th>
                     </tr>
-                  </Fragment>
-                );
-              })}
+                  )}
+                  {section.lines.map((line) => {
+                    const used = byCategory.get(line.category) || 0;
+                    const prior = previousByCategory.get(line.category) || 0;
+                    const status = awaitingKitsas ? null : rowStatus(line.kind, line.plannedCents, used, prior);
+                    return (
+                      <tr key={line.id}>
+                        <td>
+                          <CategoryDetail
+                            category={line.category}
+                            kind={line.kind}
+                            account={line.kitsasAccount}
+                            currency={budget.currency}
+                            plannedCents={line.plannedCents}
+                            periodStart={iso(periodStart)}
+                            periodEnd={iso(fullPeriodEnd)}
+                            todayIso={iso(periodEnd)}
+                            previousStart={iso(previousStart)}
+                            current={itemsFor(current, line)}
+                            previous={itemsFor(previousFull, line)}
+                          />
+                          <br />
+                          <span className="label">
+                            {line.kind === 'INCOME' ? 'Tulo' : 'Meno'}
+                            {line.kitsasAccount ? ` · tili ${line.kitsasAccount}` : ''}
+                          </span>
+                          {status && <span className={`badge badge-${status.tone}`}>{status.label}</span>}
+                        </td>
+                        <td className="right">{money(line.plannedCents, budget.currency)}</td>
+                        <td className="right">{awaitingKitsas ? <Pending /> : money(used, budget.currency)}</td>
+                        <td className="right">{awaitingKitsas ? <Pending /> : money(prior, budget.currency)}</td>
+                        <td className={`right${status?.tone === 'over' ? ' negative' : ''}`}>
+                          {awaitingKitsas ? <Pending /> : money(line.plannedCents - used, budget.currency)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {worthTotalling(section) &&
+                    section.totals.map((total) => (
+                      <tr className="total-row" key={`${section.name}:${total.kind}`}>
+                        <td>
+                          {section.totals.length > 1
+                            ? `${total.kind === 'INCOME' ? 'Tulot' : 'Menot'} yhteensä`
+                            : 'Yhteensä'}
+                        </td>
+                        <td className="right">{money(total.plannedCents, budget.currency)}</td>
+                        <td className="right">
+                          {awaitingKitsas ? <Pending /> : money(total.usedCents, budget.currency)}
+                        </td>
+                        <td className="right">
+                          {awaitingKitsas ? <Pending /> : money(total.priorCents, budget.currency)}
+                        </td>
+                        <td
+                          className={`right${
+                            !awaitingKitsas && total.kind === 'EXPENSE' && total.usedCents > total.plannedCents
+                              ? ' negative'
+                              : ''
+                          }`}
+                        >
+                          {awaitingKitsas ? <Pending /> : money(total.plannedCents - total.usedCents, budget.currency)}
+                        </td>
+                      </tr>
+                    ))}
+                </Fragment>
+              ))}
             </tbody>
           </table>
         </div>
