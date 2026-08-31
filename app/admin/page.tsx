@@ -7,6 +7,7 @@ import { BudgetEditor } from './budget-editor';
 import { BudgetUpload } from './budget-upload';
 import { OtherBudgets } from './other-budgets';
 import { UnmappedAccounts } from './unmapped-accounts';
+import { PeriodSwitcher } from '../period-switcher';
 
 const date = (value: Date) => new Intl.DateTimeFormat('fi-FI').format(value);
 
@@ -15,7 +16,11 @@ const date = (value: Date) => new Intl.DateTimeFormat('fi-FI').format(value);
  * reclassifying a row between meno and tulo, and correcting planned amounts.
  * The dashboard stays read-only for everyone, admins included.
  */
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
@@ -56,20 +61,28 @@ export default async function AdminPage() {
       _count: { select: { lines: true } },
     },
   });
-  // The dashboard opens on the live period, so the admin page must edit that
-  // same one rather than whatever was uploaded last.
-  const [active, ...previous] = activeFirst(budgets);
-  const lines = active
+  /**
+   * The live period leads, as on the dashboard, but any of them can be opened
+   * with `?talousarvio=`. Editing only ever the live one was wrong in the way
+   * that matters: a closed year's account mapping is exactly the thing that
+   * needs correcting, and it was the one thing unreachable from here.
+   */
+  const periods = activeFirst(budgets);
+  const requested = (await searchParams).talousarvio;
+  const selected =
+    (typeof requested === 'string' ? periods.find((period) => period.id === requested) : undefined) ?? periods[0];
+  const previous = periods.filter((period) => period.id !== selected?.id);
+  const lines = selected
     ? await prisma.budgetLine.findMany({
-        where: { budgetId: active.id },
+        where: { budgetId: selected.id },
         orderBy: { sortOrder: 'asc' },
         select: { id: true, category: true, groupName: true, kitsasAccount: true, plannedCents: true, kind: true },
       })
     : [];
   // Worst first: what a mapping mistake costs is measured in euros, not in rows.
-  const unmapped = active
+  const unmapped = selected
     ? await prisma.kitsasUnmappedAccount.findMany({
-        where: { budgetId: active.id },
+        where: { budgetId: selected.id },
         orderBy: [{ debetCents: 'desc' }, { kreditCents: 'desc' }],
         select: { account: true, name: true, entries: true, debetCents: true, kreditCents: true },
       })
@@ -79,14 +92,16 @@ export default async function AdminPage() {
     <>
       <p className="eyebrow">Ylläpito</p>
       <h1>Talousarvion hallinta</h1>
+      {selected && <PeriodSwitcher periods={periods} selectedId={selected.id} basePath="/admin" />}
       <p className="lede">Muutokset näkyvät heti kaikille yhdistyksen tunnuksille, jotka kirjautuvat Buduun.</p>
 
-      {active ? (
+      {selected ? (
         <BudgetEditor
-          budgetId={active.id}
-          name={active.name}
-          currency={active.currency}
-          period={active.startsOn && active.endsOn ? `${date(active.startsOn)} – ${date(active.endsOn)}` : null}
+          budgetId={selected.id}
+          name={selected.name}
+          currency={selected.currency}
+          period={selected.startsOn && selected.endsOn ? `${date(selected.startsOn)} – ${date(selected.endsOn)}` : null}
+          live={selected.id === periods[0]?.id}
           lines={lines}
         />
       ) : (
@@ -96,9 +111,9 @@ export default async function AdminPage() {
         </div>
       )}
 
-      {active && <UnmappedAccounts accounts={unmapped} currency={active.currency} />}
+      {selected && <UnmappedAccounts accounts={unmapped} currency={selected.currency} />}
 
-      <BudgetUpload replacing={active?.name ?? null} />
+      <BudgetUpload replacing={periods[0]?.name ?? null} />
       {previous.length > 0 && (
         <OtherBudgets
           budgets={previous.map((budget) => ({

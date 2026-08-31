@@ -12,6 +12,7 @@ import { AttachmentLinks } from './attachment-links';
 import { CategoryDetail } from './category-detail';
 import { Overview } from './overview';
 import { KitsasPending, Pending } from './kitsas-pending';
+import { PeriodSwitcher, type Period } from './period-switcher';
 
 const money = (cents: number, currency = 'EUR') =>
   new Intl.NumberFormat('fi-FI', { style: 'currency', currency }).format(cents / 100);
@@ -218,39 +219,6 @@ const DAY = 86_400_000;
 type DashboardBudget = Prisma.BudgetGetPayload<{ include: { lines: true } }>;
 type DashboardLine = DashboardBudget['lines'][number];
 type Entry = Prisma.KitsasEntryGetPayload<object>;
-type Period = { id: string; name: string; startsOn: Date | null; endsOn: Date | null; updatedAt: Date };
-
-/** A budget's own year, which is how people refer to a talousarvio. */
-const periodYear = (period: { startsOn: Date | null }) => period.startsOn?.getUTCFullYear() ?? null;
-
-/**
- * Switches between the imported talousarviot. Plain links rather than a select:
- * the page is server-rendered, so each period is its own address that can be
- * linked to and opened in a tab, and no client JavaScript is needed to change
- * years.
- */
-function PeriodSwitcher({ periods, selectedId }: { periods: Period[]; selectedId: string }) {
-  if (periods.length < 2) return null;
-  return (
-    <nav className="periods" aria-label="Talousarviokausi">
-      {periods.map((period) => {
-        const current = period.id === selectedId;
-        const year = periodYear(period);
-        return (
-          <Link
-            key={period.id}
-            href={period.id === periods[0]?.id ? '/' : `/?talousarvio=${period.id}`}
-            className={`period${current ? ' period-current' : ''}`}
-            aria-current={current ? 'page' : undefined}
-            title={period.name}
-          >
-            {year ?? period.name}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
 
 function Dashboard({
   budget,
@@ -417,7 +385,9 @@ function Dashboard({
           Kitsaassa on {money(unmapped.cents, budget.currency)} kirjauksia {unmapped.accounts} tilillä, joita tämä
           talousarvio ei tunne, eivätkä ne näy alla olevissa luvuissa.{' '}
           {admin ? (
-            <Link href="/admin">Korjaa tilikartta ylläpidossa.</Link>
+            // Carries the budget being viewed: the mapping at fault is this
+            // one's, which is not necessarily the live period's.
+            <Link href={`/admin?talousarvio=${encodeURIComponent(budget.id)}`}>Korjaa tilikartta ylläpidossa.</Link>
           ) : (
             'Pyydä ylläpitäjää korjaamaan tilikartta.'
           )}

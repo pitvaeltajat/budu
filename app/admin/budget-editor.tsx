@@ -27,12 +27,15 @@ export function BudgetEditor({
   name,
   currency,
   period,
+  live,
   lines,
 }: {
   budgetId: string;
   name: string;
   currency: string;
   period: string | null;
+  /** Whether this is the period covering today, which is the one the dashboard opens on. */
+  live: boolean;
   lines: EditorLine[];
 }) {
   const [state, formAction, pending] = useActionState<AdminState, FormData>(saveBudget, {});
@@ -87,8 +90,9 @@ export function BudgetEditor({
   return (
     <form action={formAction} className="card admin-block">
       <div className="section-head">
-        <h2>Nykyinen talousarvio</h2>
+        <h2>{live ? 'Nykyinen talousarvio' : name}</h2>
         <span className="label">
+          {live ? '' : 'päättynyt kausi · '}
           {period ?? 'Kausi ei tiedossa'} · {lines.length} riviä
         </span>
       </div>

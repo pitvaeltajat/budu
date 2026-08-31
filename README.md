@@ -21,9 +21,11 @@ Changing that shared budget is restricted to admins:
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `BUDU_ADMIN_EMAILS` | Comma-separated emails allowed to import, edit and delete the talousarvio. **Unset means every signed-in user is an admin**, which is what Budu did before the setting existed — the domain restriction still applies, so the widest this gets is the organisation itself. |
 
-Admins get `/admin`, where the talousarvio is imported or replaced, rows are reclassified between meno and tulo, and planned amounts are corrected. The dashboard itself is read-only for everyone, admins included. Reading realized expenses from Kitsas (`POST /api/kitsas/sync`) stays open to any signed-in user, because it fetches bookings rather than changing the budget.
+Admins get `/admin`, where the talousarvio is imported or replaced, rows are reclassified between meno and tulo, planned amounts are corrected, and a row's Kitsas account is remapped. The dashboard itself is read-only for everyone, admins included. Reading realized expenses from Kitsas (`POST /api/kitsas/sync`) stays open to any signed-in user, because it fetches bookings rather than changing the budget.
 
-The active budget is simply the most recently updated one. Only an import or an admin edit moves `updatedAt`; a Kitsas sync writes expenses, sync runs and voucher state but never the budget row, so the nightly cron cannot change which budget is on screen.
+The live budget is the one whose **period contains today**; `updatedAt` is only the tiebreak when no period does. Only an import or an admin edit moves `updatedAt`; a Kitsas sync writes expenses, sync runs and voucher state but never the budget row, so the nightly cron cannot change which budget is on screen. See `lib/budget-period.ts`.
+
+Two rows may not map the same Kitsas account. That is not a double count but a silent loss: the dashboard joins bookings through a map keyed by account number, so the second row to claim one replaces the first and the other stops receiving anything. Saving a changed mapping also drops that budget's sync runs, because the newly mapped accounts were discarded by every earlier sync and have to be fetched again.
 
 ## Budget file format
 
@@ -40,7 +42,9 @@ For the simple format, use these headers:
 | `budget_name` | No              | Default budget title                   |
 | `currency`    | No              | Defaults to `EUR`                      |
 
-Importing a file creates a new budget; it does not discard prior local budgets or the bookings read from Kitsas. The one everybody lands on is the budget whose **period contains today**, not simply the newest upload — otherwise importing a closed year for comparison would take over the front page. Everything else stays intact under "Aiemmat talousarviot" on `/admin` until an admin deletes it, and is reachable from the year tabs on the dashboard. The last remaining budget cannot be deleted, since that would leave the whole organisation on the empty state.
+Importing a file creates a new budget; it does not discard prior local budgets or the bookings read from Kitsas. The one everybody lands on is the budget whose **period contains today**, not simply the newest upload — otherwise importing a closed year for comparison would take over the front page. Everything else stays intact until an admin deletes it. The last remaining budget cannot be deleted, since that would leave the whole organisation on the empty state.
+
+Both the dashboard and `/admin` carry the same year tabs and take the same `?talousarvio=<id>`, so any period can be read _and_ edited. Admin editing only the live budget was a real trap: a closed year's account mapping is exactly what tends to need correcting, and the warning about it linked to a page that could only edit the current year.
 
 The dashboard's year tabs link to `/?talousarvio=<id>`. A closed period is drawn as a finished year: the whole period against the whole of the year before, rather than "so far this year" against the same date last year. Where the comparison year has no bookings at all — the association's Kitsas history starts partway through — the page says so rather than presenting an empty column as a real zero.
 
