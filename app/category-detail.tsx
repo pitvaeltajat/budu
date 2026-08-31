@@ -33,6 +33,12 @@ export type CategoryDetailProps = {
   previousStart: string;
   current: CategoryItem[];
   previous: CategoryItem[];
+  /**
+   * What the trigger reads, when the line's own name is not what is on screen.
+   * The overview and the recent-expense list open the same modal from their own
+   * wording; the modal itself always heads with the category.
+   */
+  label?: string;
 };
 
 const DAY = 86_400_000;
@@ -87,8 +93,14 @@ export function CategoryDetail(props: CategoryDetailProps) {
 
   return (
     <>
-      <button type="button" className="row-open" onClick={() => setOpen(true)}>
-        {category}
+      <button
+        type="button"
+        className="row-open"
+        onClick={() => setOpen(true)}
+        // The visible text can be the row's own wording, so name the line it opens.
+        aria-label={props.label ? `${props.label} — ${category}` : undefined}
+      >
+        {props.label ?? category}
       </button>
       <dialog
         ref={dialogRef}

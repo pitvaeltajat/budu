@@ -10,7 +10,7 @@ import type { Prisma } from '@prisma/client';
 import { summarisePace } from '@/lib/budget-pace';
 import { sectionsOf, worthTotalling } from '@/lib/budget-groups';
 import { AttachmentLinks } from './attachment-links';
-import { CategoryDetail } from './category-detail';
+import { CategoryDetail, type CategoryDetailProps } from './category-detail';
 import { Overview } from './overview';
 import { KitsasPending, Pending } from './kitsas-pending';
 import { PeriodSwitcher, type Period } from './period-switcher';
@@ -364,6 +364,29 @@ function Dashboard({
   );
   /** The table's sections, each carrying its own totals; see lib/budget-groups.ts. */
   const sections = sectionsOf(budget.lines, byCategory, previousByCategory);
+  /**
+   * Everything a line's modal needs, keyed by category and built once. The
+   * table, the overview's alerts and the recent-expense list all open the same
+   * modal, and a line's bookings should not be gathered three times to do it.
+   */
+  const detailsByCategory: Record<string, CategoryDetailProps> = Object.fromEntries(
+    budget.lines.map((line) => [
+      line.category,
+      {
+        category: line.category,
+        kind: line.kind,
+        account: line.kitsasAccount,
+        currency: budget.currency,
+        plannedCents: line.plannedCents,
+        periodStart: iso(periodStart),
+        periodEnd: iso(fullPeriodEnd),
+        todayIso: iso(periodEnd),
+        previousStart: iso(previousStart),
+        current: itemsFor(current, line),
+        previous: itemsFor(previousFull, line),
+      },
+    ]),
+  );
   const pace = summarisePace({
     lines: budget.lines,
     usedByCategory: byCategory,
@@ -428,6 +451,7 @@ function Dashboard({
         expense={{ usedCents: actual, plannedCents: planned, expectedCents: pace.expectedExpenseCents }}
         income={{ usedCents: incomeActual, plannedCents: incomePlanned, expectedCents: pace.expectedIncomeCents }}
         alerts={pace.alerts}
+        details={detailsByCategory}
       />
       <div className="actions">
         {admin && (
@@ -478,19 +502,7 @@ function Dashboard({
                     return (
                       <tr key={line.id}>
                         <td>
-                          <CategoryDetail
-                            category={line.category}
-                            kind={line.kind}
-                            account={line.kitsasAccount}
-                            currency={budget.currency}
-                            plannedCents={line.plannedCents}
-                            periodStart={iso(periodStart)}
-                            periodEnd={iso(fullPeriodEnd)}
-                            todayIso={iso(periodEnd)}
-                            previousStart={iso(previousStart)}
-                            current={itemsFor(current, line)}
-                            previous={itemsFor(previousFull, line)}
-                          />
+                          <CategoryDetail {...detailsByCategory[line.category]} />
                           <br />
                           <span className="label">
                             {line.kind === 'INCOME' ? 'Tulo' : 'Meno'}
@@ -549,7 +561,11 @@ function Dashboard({
                 {recentExpenses.slice(0, 8).map((item) => (
                   <tr key={item.id}>
                     <td>
-                      <strong>{item.description}</strong>
+                      <strong>
+                        {/* Opens the same modal the table does, so a booking that
+                            catches the eye leads straight to its line's history. */}
+                        <CategoryDetail {...detailsByCategory[item.category]} label={item.description} />
+                      </strong>
                       <br />
                       <span className="label">
                         {date(item.occurredOn)} · {item.category}

@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
 import { type Alert, OVERRUN_MARGIN, SHORTFALL_MARGIN, INCOME_SERIOUS_SHARE } from '@/lib/budget-pace';
 import { Pending } from './kitsas-pending';
+import { CategoryDetail, type CategoryDetailProps } from './category-detail';
 
 /** Six rows fit without the card turning into a second copy of the table. */
 const ALERT_LIMIT = 6;
@@ -67,12 +69,15 @@ export function Overview({
   expense,
   income,
   alerts,
+  details,
 }: {
   currency: string;
   awaiting: boolean;
   expense: Totals;
   income: Totals;
   alerts: Alert[];
+  /** Each line's modal, keyed by category, so an alert can open the one it names. */
+  details: Record<string, CategoryDetailProps>;
 }) {
   if (awaiting)
     return (
@@ -126,7 +131,12 @@ export function Overview({
             {shown.map((alert) => (
               <li key={alert.category}>
                 <MeterRow
-                  name={alert.category}
+                  /**
+                   * The same modal the table opens. An alert names a line and
+                   * says it has drifted; the next question is always which
+                   * bookings did that, and it was two scrolls away.
+                   */
+                  name={details[alert.category] ? <CategoryDetail {...details[alert.category]} /> : alert.category}
                   tone={alert.tone}
                   label={badgeLabel(alert.reason)}
                   totals={{
@@ -161,7 +171,7 @@ function MeterRow({
   currency,
   note,
 }: {
-  name: string;
+  name: ReactNode;
   tone: Tone;
   label?: string;
   totals: Totals;
