@@ -1,5 +1,6 @@
 import NextAuth, { type DefaultSession } from 'next-auth';
 import Google from 'next-auth/providers/google';
+import Credentials from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/prisma';
 
 declare module 'next-auth' {
@@ -22,6 +23,21 @@ export const allowedDomains = (process.env.GOOGLE_WORKSPACE_DOMAIN ?? '')
 /** The `hd` request param only narrows Google's account chooser; it is a hint, not a control. */
 const hdHint = allowedDomains.length === 1 ? allowedDomains[0] : allowedDomains.length > 1 ? '*' : undefined;
 
+/**
+ * A password-less sign-in for local work, because Google OAuth cannot be
+ * exercised from a laptop against a throwaway database — every dashboard change
+ * would otherwise have to be judged from a hand-written fixture rather than the
+ * page people actually get.
+ *
+ * Two independent gates, both of which must hold. `NODE_ENV` is fixed to
+ * `production` by `next build`, so a deploy cannot reach this branch whatever
+ * the environment says; `BUDU_DEV_LOGIN` then means a developer has to ask for
+ * it by name even in development. The provider is absent from `providers` when
+ * either gate fails, so its route does not exist rather than existing and
+ * refusing — there is no endpoint to probe.
+ */
+export const devLoginEnabled = process.env.NODE_ENV !== 'production' && process.env.BUDU_DEV_LOGIN === '1';
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   /** A rejected sign-in lands back on the login page, which explains the domain rule in Finnish. */
   pages: { signIn: '/login', error: '/login' },
@@ -31,9 +47,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? process.env.AUTH_GOOGLE_SECRET ?? '',
       authorization: hdHint ? { params: { hd: hdHint } } : undefined,
     }),
+    ...(devLoginEnabled
+      ? [
+          Credentials({
+            id: 'dev',
+            name: 'Kehitystunnus',
+            credentials: { email: { label: 'Sähköposti', type: 'email' } },
+            authorize: async (credentials) => {
+              const email = String(credentials?.email ?? '')
+                .trim()
+                .toLowerCase();
+              if (!email) return null;
+              // Signs in as an existing row only. Seeding is the seed script's
+              // job, so a typo fails the login instead of quietly creating a
+              // second account that owns nothing.
+              return await prisma.user.findUnique({ where: { email }, select: { id: true, email: true, name: true } });
+            },
+          }),
+        ]
+      : []),
   ],
   callbacks: {
     async signIn({ user, account, profile }) {
+      if (account?.provider === 'dev') return devLoginEnabled;
       if (account?.provider !== 'google' || !user.email) return false;
       const email = user.email.toLowerCase();
       if (profile && profile.email_verified === false) return false;

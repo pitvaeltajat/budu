@@ -11,6 +11,19 @@ Realtime budget tracking: upload a planned budget, then compare it with read-onl
 
 The included Postgres container is exposed at `127.0.0.1:5436`, so it can run alongside Klapi’s database on port 5432.
 
+### Signing in without Google
+
+Google OAuth cannot be exercised against a throwaway local database, which leaves the dashboard — the whole app — unreachable from a laptop. Setting `BUDU_DEV_LOGIN=1` in `.env.local` adds a second sign-in to `/login` that takes an email address and no password:
+
+```
+BUDU_DEV_LOGIN="1"
+node --env-file=.env.local scripts/seed-local.mjs   # writes the user it signs in as
+```
+
+The seed fills the database with two years of a plausible association: sections, income and expense lines, an unmapped account or two, and enough bookings for the comparison column and the per-line chart to have something to draw. It refuses to run against anything but `localhost`, and it deletes budgets — never point it at production.
+
+The sign-in itself is gated twice: `NODE_ENV !== 'production'`, which `next build` fixes for any deploy, **and** the explicit `BUDU_DEV_LOGIN`. When either gate is closed the provider is not registered at all, so there is no endpoint to probe. See `devLoginEnabled` in `lib/auth.ts`.
+
 ## Who sees what
 
 Budu tracks **one talousarvio at a time, shared by the whole organisation**. Every signed-in user sees the same budget on the dashboard; nothing is scoped per user. Sign-in is already restricted to `GOOGLE_WORKSPACE_DOMAIN` (enforced on Google’s `hd` claim, not the email suffix), so holding a valid session _is_ the membership check. `Budget.createdById` records who uploaded a budget and is not an access control.

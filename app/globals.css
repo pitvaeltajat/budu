@@ -304,12 +304,19 @@ tr:last-child td {
 }
 .signin {
   display: grid;
-  min-height: 100vh;
+  /* dvh, so the card is not pushed under a mobile browser's address bar. */
+  min-height: 100dvh;
   place-items: center;
   padding: 24px;
 }
+/*
+ * min-width: 0 is what makes the 100% mean anything. A grid item's minimum is
+ * `auto`, so the card was floored at the widest thing inside it and sat 420px
+ * wide in a 390px phone with its right edge cut off, rather than shrinking.
+ */
 .signin .card {
   width: min(420px, 100%);
+  min-width: 0;
   text-align: center;
 }
 .signin h1 {
@@ -320,19 +327,25 @@ tr:last-child td {
   color: var(--muted-foreground);
   line-height: 1.5;
 }
+/* Wraps rather than overflowing: a field and its button do not both fit across a phone. */
 .form-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 14px;
 }
 .form-row input {
+  flex: 1 1 12ch;
+  min-width: 0;
   max-width: 100%;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--card);
   color: var(--foreground);
   padding: 9px;
+  /* Anything under 16px makes iOS Safari zoom the page in on focus and leave it there. */
+  font-size: 16px;
 }
 .form-row label {
   color: var(--muted-foreground);
@@ -352,25 +365,170 @@ select:focus-visible {
   outline-offset: 2px;
 }
 @media (max-width: 980px) {
+  /*
+   * minmax(0, …) rather than a bare 1fr: a grid track will not shrink below its
+   * content's minimum width by default, and "Menoarviota jäljellä" over an
+   * unbreakable "9 346,00 €" was wide enough to push the pair past the screen
+   * and give the whole page a horizontal scrollbar.
+   */
   .summary {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 760px) {
-  .summary,
   .grid {
     grid-template-columns: 1fr;
   }
   .topbar {
     margin-bottom: 28px;
   }
-  .user {
-    align-items: flex-end;
-    flex-direction: column;
-    gap: 2px;
-  }
   h1 {
     font-size: 30px;
+  }
+}
+/*
+ * Phones. The four summary tiles deliberately stay two-abreast rather than
+ * collapsing to one: they are a label and a number each, and stacking them
+ * spends most of a phone screen restating what fits in half of it.
+ */
+@media (max-width: 560px) {
+  .shell {
+    padding: 0 12px 40px;
+  }
+  .topbar {
+    margin: 0 -12px 24px;
+    padding: 0 12px;
+    gap: 10px;
+  }
+  .brand {
+    font-size: 20px;
+  }
+  /*
+   * One row, with the address giving up its width first — it is the only part
+   * that can be truncated and still read. The two controls hold their size and
+   * refuse to wrap; "Kirjaudu ulos" broken across two lines reads as a fault.
+   */
+  .user {
+    gap: 10px;
+    min-width: 0;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .user > a,
+  .user > form {
+    flex: 0 0 auto;
+  }
+  .user > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card {
+    padding: 16px;
+  }
+  .summary {
+    gap: 10px;
+    margin: 20px 0 12px;
+  }
+  .summary strong {
+    margin-top: 4px;
+    font-size: 21px;
+    letter-spacing: -0.4px;
+  }
+  h1 {
+    font-size: 26px;
+    letter-spacing: -0.8px;
+  }
+  /* Thumb-sized year tabs; 26px of pill is a miss waiting to happen. */
+  .period {
+    padding: 8px 14px;
+  }
+}
+/* The narrowest phones still in use. A euro figure cannot wrap, so it is the type size that has to give. */
+@media (max-width: 380px) {
+  .card {
+    padding: 14px;
+  }
+  .summary strong {
+    font-size: 18px;
+  }
+}
+/*
+ * Below this the five money columns cannot be told apart, so each budget line
+ * stops being a row and becomes a card: the name and its badge across the top,
+ * then the four figures two-abreast, each carrying the heading the (now hidden)
+ * header row used to supply. Without this the table simply runs off the side and
+ * takes the whole page's horizontal scroll with it — "Viime vuonna" and
+ * "Jäljellä" were unreachable rather than merely cramped.
+ *
+ * Scoped to .budget-table on purpose. The recent-expenses and modal tables are
+ * two columns of description-and-amount and already read fine on a phone.
+ *
+ * Every selector below is a chain of direct children, which is load-bearing
+ * rather than tidiness: each row's <dialog> is a DOM descendant of the cell that
+ * opens it, so a plain `.budget-table td` also matches the table of bookings
+ * inside the modal and stacked that one too.
+ */
+@media (max-width: 700px) {
+  .budget-table,
+  .budget-table > tbody,
+  .budget-table > tbody > tr,
+  .budget-table > tbody > tr > td,
+  .budget-table > tbody > tr > th {
+    display: block;
+  }
+  .budget-table > thead {
+    display: none;
+  }
+  .budget-table > tbody > tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .budget-table > tbody > tr > td,
+  .budget-table > tbody > tr > th {
+    border-bottom: 0;
+    padding: 2px 0;
+  }
+  .budget-table > tbody > tr > td:first-child {
+    grid-column: 1 / -1;
+    margin-bottom: 6px;
+  }
+  /* The heading the header row used to carry, now sitting on the figure itself. */
+  .budget-table > tbody > tr > td.right {
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+  }
+  .budget-table > tbody > tr > td.right::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--muted-foreground);
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .budget-table > tbody > tr.group-row {
+    display: block;
+    padding: 0;
+    border-bottom: 0;
+  }
+  .budget-table > tbody > tr.total-row {
+    border-bottom: 0;
+    border-top: 1px solid var(--border);
+  }
+  .budget-table > tbody > tr.total-row > td:first-child {
+    margin-bottom: 2px;
+  }
+  .budget-table > tbody > tr:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+  /* A row's name is the control that opens it, so it gets the size of one. */
+  .budget-table > tbody > tr > td > .row-open {
+    padding: 2px 0;
+    font-size: 15px;
+    font-weight: 650;
   }
 }
 .row-open {
@@ -453,9 +611,31 @@ select:focus-visible {
     grid-template-columns: repeat(2, 1fr);
   }
 }
-@media (max-width: 520px) {
+/*
+ * On a phone the dialog is the screen. It keeps the two-column summary — four
+ * figures one under another pushed the chart, which is the reason to open this
+ * at all, below the fold on every line.
+ */
+@media (max-width: 560px) {
+  .modal {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 100dvh;
+    height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .modal-body {
+    max-height: 100dvh;
+    padding: 20px 16px 32px;
+  }
   .modal-summary {
-    grid-template-columns: 1fr;
+    gap: 10px 12px;
+    margin: 14px 0 4px;
+  }
+  .modal-summary strong {
+    font-size: 17px;
   }
 }
 .modal tr.is-active td {
@@ -573,10 +753,12 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  /* A receipt is opened with a fingertip as often as with a cursor; 2px of padding is not a target. */
+  min-height: 28px;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--card);
-  padding: 2px 8px;
+  padding: 4px 8px;
   color: var(--foreground);
   font-size: 11px;
   font-weight: 650;

@@ -387,6 +387,18 @@ function Dashboard({
       },
     ]),
   );
+  /**
+   * The figure columns' headings, named once. Narrow screens drop the header row
+   * and stack each line into a card, where every figure has to carry its own
+   * label — so the same four strings are read twice, and a closed period must
+   * not be able to say "Tänä vuonna" in the header and "Kaudella" on the card.
+   */
+  const columns = {
+    planned: 'Arvio',
+    used: closed ? 'Kaudella' : 'Tänä vuonna',
+    prior: closed ? `Vuonna ${priorYear}` : 'Viime vuonna',
+    remaining: 'Jäljellä',
+  };
   const pace = summarisePace({
     lines: budget.lines,
     usedByCategory: byCategory,
@@ -475,14 +487,14 @@ function Dashboard({
             <h2>Talousarvion kohdat</h2>
             <span className="label">{closed ? `kausi / ${priorYear}` : 'kuluva / viime vuosi'}</span>
           </div>
-          <table>
+          <table className="budget-table">
             <thead>
               <tr>
                 <th>Kohta</th>
-                <th className="right">Arvio</th>
-                <th className="right">{closed ? 'Kaudella' : 'Tänä vuonna'}</th>
-                <th className="right">{closed ? `Vuonna ${priorYear}` : 'Viime vuonna'}</th>
-                <th className="right">Jäljellä</th>
+                <th className="right">{columns.planned}</th>
+                <th className="right">{columns.used}</th>
+                <th className="right">{columns.prior}</th>
+                <th className="right">{columns.remaining}</th>
               </tr>
             </thead>
             <tbody>
@@ -510,10 +522,19 @@ function Dashboard({
                           </span>
                           {status && <span className={`badge badge-${status.tone}`}>{status.label}</span>}
                         </td>
-                        <td className="right">{money(line.plannedCents, budget.currency)}</td>
-                        <td className="right">{awaitingKitsas ? <Pending /> : money(used, budget.currency)}</td>
-                        <td className="right">{awaitingKitsas ? <Pending /> : money(prior, budget.currency)}</td>
-                        <td className={`right${status?.tone === 'over' ? ' negative' : ''}`}>
+                        <td className="right" data-label={columns.planned}>
+                          {money(line.plannedCents, budget.currency)}
+                        </td>
+                        <td className="right" data-label={columns.used}>
+                          {awaitingKitsas ? <Pending /> : money(used, budget.currency)}
+                        </td>
+                        <td className="right" data-label={columns.prior}>
+                          {awaitingKitsas ? <Pending /> : money(prior, budget.currency)}
+                        </td>
+                        <td
+                          className={`right${status?.tone === 'over' ? ' negative' : ''}`}
+                          data-label={columns.remaining}
+                        >
                           {awaitingKitsas ? <Pending /> : money(line.plannedCents - used, budget.currency)}
                         </td>
                       </tr>
@@ -527,11 +548,13 @@ function Dashboard({
                             ? `${total.kind === 'INCOME' ? 'Tulot' : 'Menot'} yhteensä`
                             : 'Yhteensä'}
                         </td>
-                        <td className="right">{money(total.plannedCents, budget.currency)}</td>
-                        <td className="right">
+                        <td className="right" data-label={columns.planned}>
+                          {money(total.plannedCents, budget.currency)}
+                        </td>
+                        <td className="right" data-label={columns.used}>
                           {awaitingKitsas ? <Pending /> : money(total.usedCents, budget.currency)}
                         </td>
-                        <td className="right">
+                        <td className="right" data-label={columns.prior}>
                           {awaitingKitsas ? <Pending /> : money(total.priorCents, budget.currency)}
                         </td>
                         <td
@@ -540,6 +563,7 @@ function Dashboard({
                               ? ' negative'
                               : ''
                           }`}
+                          data-label={columns.remaining}
                         >
                           {awaitingKitsas ? <Pending /> : money(total.plannedCents - total.usedCents, budget.currency)}
                         </td>

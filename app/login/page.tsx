@@ -1,4 +1,4 @@
-import { allowedDomains, auth, signIn } from '@/lib/auth';
+import { allowedDomains, auth, devLoginEnabled, signIn } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 
 /** Falls back to the association's own domain when no allowlist is configured, so the advice is never blank. */
@@ -39,6 +39,21 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             Kirjaudu Google-tilillä
           </button>
         </form>
+        {devLoginEnabled && (
+          // Local only; see devLoginEnabled in lib/auth.ts for the two gates.
+          <form
+            className="form-row"
+            action={async (data: FormData) => {
+              'use server';
+              await signIn('dev', { email: data.get('email'), redirectTo: '/' });
+            }}
+          >
+            <input name="email" type="email" required placeholder="kehitys@esimerkki.fi" aria-label="Sähköposti" />
+            <button className="button secondary" type="submit">
+              Kehityskirjautuminen
+            </button>
+          </form>
+        )}
       </section>
     </main>
   );

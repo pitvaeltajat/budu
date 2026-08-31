@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AttachmentLinks, type AttachmentFile } from './attachment-links';
 
 /**
@@ -40,6 +40,34 @@ export type CategoryDetailProps = {
    */
   label?: string;
 };
+
+/**
+ * Watches a media query from the client. The chart is drawn in SVG user units
+ * and then scaled to whatever width it lands in, so its own geometry — not CSS —
+ * decides how large the labels come out; on a phone the desktop viewBox shrank
+ * a 12px label to about a third of that. Reading the query at render time lets
+ * the same component draw a narrower, coarser chart instead.
+ *
+ * Safe against hydration because the dialog's contents only exist once it has
+ * been opened, which is a client event; the server renders the trigger alone.
+ */
+function useMedia(query: string) {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const list = window.matchMedia(query);
+      list.addEventListener('change', onChange);
+      return () => list.removeEventListener('change', onChange);
+    },
+    [query],
+  );
+  // The server snapshot is the wide layout, which costs nothing: the dialog's
+  // contents are only ever built after a click, so this is never server-rendered.
+  return useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia(query).matches,
+    () => false,
+  );
+}
 
 const DAY = 86_400_000;
 const money = (cents: number, currency: string) =>
@@ -214,11 +242,24 @@ function Chart({
   onActiveChange: (id: string | null) => void;
 }) {
   const [hover, setHover] = useState<number | null>(null);
-  const width = 680;
-  const height = 260;
-  const pad = { top: 16, right: 76, bottom: 28, left: 8 };
+  /** True while a finger is down, so a touch scrubs only when it means to. */
+  const scrubbing = useRef(false);
+  const compact = useMedia('(max-width: 560px)');
+  const touch = useMedia('(pointer: coarse)');
+  /**
+   * A narrower canvas at the same nominal font size, which is what makes the
+   * labels legible once the SVG is scaled down to a phone's width. The right
+   * gutter shrinks with it, so the end labels still have room without eating the
+   * plot.
+   */
+  const width = compact ? 340 : 680;
+  const height = compact ? 220 : 260;
+  const pad = compact ? { top: 12, right: 52, bottom: 24, left: 6 } : { top: 16, right: 76, bottom: 28, left: 8 };
+  const font = compact ? 11 : 12;
   const plotWidth = width - pad.left - pad.right;
   const plotHeight = height - pad.top - pad.bottom;
+  /** How far apart two end labels have to be before they stop overlapping. */
+  const lineHeight = font + 2;
 
   const peak = Math.max(plannedCents, current.at(-1)?.total ?? 0, previous.at(-1)?.total ?? 0, 1);
   const yMax = peak * 1.12;
@@ -247,6 +288,26 @@ function Chart({
 
   const hoverDay = hover === null ? null : Math.max(0, Math.min(totalDays, hover));
 
+  /** Moves the readout to whatever day sits under the pointer, snapping to a nearby booking. */
+  const track = (event: React.PointerEvent<SVGSVGElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    const ratio = (event.clientX - box.left) / box.width;
+    const day = Math.round(((ratio * width - pad.left) / plotWidth) * totalDays);
+    setHover(day);
+    /** Snap to a booking only when the pointer is genuinely near one. */
+    const tolerance = Math.max(3, Math.round(totalDays / 60));
+    let nearest: Point | null = null;
+    for (const point of current) {
+      if (Math.abs(point.day - day) > tolerance) continue;
+      if (!nearest || Math.abs(point.day - day) < Math.abs(nearest.day - day)) nearest = point;
+    }
+    onActiveChange(nearest ? nearest.id : null);
+  };
+  const clear = () => {
+    setHover(null);
+    onActiveChange(null);
+  };
+
   /**
    * Both series can finish within a few euros of each other, which stacks the end
    * labels on top of one another. Push them apart when they are closer than a
@@ -269,8 +330,8 @@ function Chart({
     /** Keep the current year where it is and push everything else clear of it. */
     for (let i = 1; i < labels.length; i++) {
       for (let j = 0; j < i; j++) {
-        if (Math.abs(labels[i].y - labels[j].y) >= 14) continue;
-        labels[i].y = labels[i].y >= labels[j].y ? labels[j].y + 14 : labels[j].y - 14;
+        if (Math.abs(labels[i].y - labels[j].y) >= lineHeight) continue;
+        labels[i].y = labels[i].y >= labels[j].y ? labels[j].y + lineHeight : labels[j].y - lineHeight;
       }
     }
     return labels.map((label) => ({ ...label, y: Math.max(pad.top + 8, Math.min(pad.top + plotHeight, label.y)) }));
@@ -282,23 +343,38 @@ function Chart({
         viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label="Kertymä kuluvalla kaudella verrattuna arvioon ja viime vuoteen"
-        onMouseMove={(event) => {
-          const box = event.currentTarget.getBoundingClientRect();
-          const ratio = (event.clientX - box.left) / box.width;
-          const day = Math.round(((ratio * width - pad.left) / plotWidth) * totalDays);
-          setHover(day);
-          /** Snap to a booking only when the pointer is genuinely near one. */
-          const tolerance = Math.max(3, Math.round(totalDays / 60));
-          let nearest: Point | null = null;
-          for (const point of current) {
-            if (Math.abs(point.day - day) > tolerance) continue;
-            if (!nearest || Math.abs(point.day - day) < Math.abs(nearest.day - day)) nearest = point;
-          }
-          onActiveChange(nearest ? nearest.id : null);
+        /**
+         * Pointer events rather than mouse events, so the readout works under a
+         * finger. `pan-y` keeps the modal scrollable through the chart while
+         * still letting a sideways drag scrub it — `none` would have trapped the
+         * scroll on a graphic that spans the width of the screen.
+         */
+        style={{ touchAction: 'pan-y' }}
+        onPointerDown={(event) => {
+          scrubbing.current = true;
+          track(event);
+          // Keeps the scrub alive when the finger wanders off the graphic, but
+          // it throws on a pointer the browser no longer considers active, and
+          // losing capture is not a reason to lose the reading.
+          try {
+            event.currentTarget.setPointerCapture(event.pointerId);
+          } catch {}
         }}
-        onMouseLeave={() => {
-          setHover(null);
-          onActiveChange(null);
+        onPointerMove={(event) => {
+          // A mouse tracks on hover; a finger only once it is down and scrubbing.
+          if (event.pointerType === 'mouse' || scrubbing.current) track(event);
+        }}
+        onPointerUp={(event) => {
+          scrubbing.current = false;
+          // The reading stays put when the finger lifts, because on a touch screen
+          // there is nothing left pointing at it to read it against.
+          if (event.pointerType === 'mouse') clear();
+        }}
+        onPointerCancel={() => {
+          scrubbing.current = false;
+        }}
+        onPointerLeave={(event) => {
+          if (event.pointerType === 'mouse') clear();
         }}
       >
         <line
@@ -358,7 +434,7 @@ function Chart({
             key={label.text}
             x={pad.left + plotWidth + 8}
             y={label.y}
-            fontSize="12"
+            fontSize={font}
             fill={label.fill}
             fontWeight={label.weight}
           >
@@ -404,16 +480,18 @@ function Chart({
             strokeDasharray="3 4"
           />
         )}
-        <text x={pad.left} y={height - 8} fontSize="12" fill="var(--muted-foreground)">
+        <text x={pad.left} y={height - 8} fontSize={font} fill="var(--muted-foreground)">
           {shortDate(periodStart)}
         </text>
-        <text x={pad.left + plotWidth} y={height - 8} fontSize="12" fill="var(--muted-foreground)" textAnchor="end">
+        <text x={pad.left + plotWidth} y={height - 8} fontSize={font} fill="var(--muted-foreground)" textAnchor="end">
           {shortDate(dayToDate(totalDays))}
         </text>
       </svg>
       <figcaption className="chart-readout">
         {hoverDay === null ? (
-          <span className="label">Vie osoitin kuvaajan päälle nähdäksesi kertymän.</span>
+          <span className="label">
+            {touch ? 'Pyyhkäise kuvaajaa nähdäksesi kertymän.' : 'Vie osoitin kuvaajan päälle nähdäksesi kertymän.'}
+          </span>
         ) : (
           <>
             <span className="label">{fullDate(dayToDate(hoverDay))}</span>
