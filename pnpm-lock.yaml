@@ -30,6 +30,9 @@ importers:
         specifier: ^0.18.5
         version: 0.18.5
     devDependencies:
+      '@auth/core':
+        specifier: 0.41.0
+        version: 0.41.0
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1
