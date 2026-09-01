@@ -98,7 +98,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     ? {
         cookies: {
           sessionToken: {
-            name: '__Secure-authjs.session-token',
+            // Deliberately NOT the Auth.js default name. Klapi and Budu
+            // already had host-scoped cookies called
+            // `__Secure-authjs.session-token`; reusing it for the
+            // domain-scoped one left every existing user holding two cookies
+            // with a single name, the browser sending both, and Auth.js
+            // picking the stale one — "no matching decryption secret" on every
+            // request, with no way to recover. A distinct name makes the old
+            // cookie simply irrelevant: ignored, and expired by its own maxAge.
+            name: '__Secure-pitva.session-token',
             options: {
               httpOnly: true,
               sameSite: 'lax' as const,
