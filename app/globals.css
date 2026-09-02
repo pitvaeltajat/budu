@@ -73,6 +73,37 @@ button:hover {
   color: var(--primary-foreground);
   box-shadow: 0 1px 3px rgb(34 30 93 / 18%);
 }
+/*
+ * The wordmark and the way back out. Grouped so the topbar's space-between
+ * still has exactly two children — the brand end and the user end — with the
+ * link riding along beside the brand rather than becoming a third thing the
+ * bar has to distribute.
+ */
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+/*
+ * Deliberately quieter than the wordmark: this is the exit, not the identity.
+ * It stays visible signed out, which is when it is most useful — atk.pitva.fi
+ * is where the sign-in actually happens.
+ */
+.uplink {
+  color: inherit;
+  font-size: 14px;
+  text-decoration: none;
+  opacity: 0.8;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+}
+.uplink:hover {
+  opacity: 1;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .brand {
   display: inline-flex;
   align-items: center;

@@ -27,9 +27,14 @@ export default async function AdminPage({
   const shell = (body: React.ReactNode) => (
     <main className="shell">
       <header className="topbar">
-        <Link className="brand" href="/">
-          BUDU
-        </Link>
+        <div className="brand-group">
+          <Link className="brand" href="/">
+            BUDU
+          </Link>
+          <a className="uplink" href="https://atk.pitva.fi" title="Kaikki PitVan palvelut">
+            ← ATK
+          </a>
+        </div>
         <div className="user">
           <Link href="/">Etusivulle</Link>
           <span>{session.user.email}</span>

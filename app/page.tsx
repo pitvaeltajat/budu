@@ -95,10 +95,17 @@ export default async function Home({
   return (
     <main className="shell">
       <header className="topbar">
-        <Link className="brand" href="/">
-          <PitvaMark />
-          BUDU
-        </Link>
+        <div className="brand-group">
+          <Link className="brand" href="/">
+            <PitvaMark />
+            BUDU
+          </Link>
+          {/* Back to the front door that issued this session. A plain <a> and
+              not next/link: it leaves the app for another origin. */}
+          <a className="uplink" href="https://atk.pitva.fi" title="Kaikki PitVan palvelut">
+            ← ATK
+          </a>
+        </div>
         <div className="user">
           {admin && <Link href="/admin">Ylläpito</Link>}
           <span>{session.user.email}</span>
