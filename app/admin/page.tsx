@@ -112,7 +112,6 @@ export default async function AdminPage({
       ) : (
         <div className="card admin-block">
           <h2>Ei vielä talousarviota</h2>
-          <p className="label">Tuo talousarvio alta, niin se tulee näkyviin kaikille.</p>
         </div>
       )}
 
