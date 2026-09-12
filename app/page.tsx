@@ -443,7 +443,7 @@ function Dashboard({
       {configured && !awaitingKitsas && !previous.length && (
         <p className="notice">
           Vuodelta {priorYear} ei ole kirjauksia Kitsaassa, joten vertailusarake on tyhjä. Se ei tarkoita, ettei rahaa
-          olisi liikkunut — kirjanpito on aloitettu Kitsaassa myöhemmin.
+          olisi liikkunut, vaan kirjanpito on aloitettu Kitsaassa myöhemmin.
         </p>
       )}
       <section className="summary">

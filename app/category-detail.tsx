@@ -126,7 +126,7 @@ export function CategoryDetail(props: CategoryDetailProps) {
         className="row-open"
         onClick={() => setOpen(true)}
         // The visible text can be the row's own wording, so name the line it opens.
-        aria-label={props.label ? `${props.label} — ${category}` : undefined}
+        aria-label={props.label ? `${props.label}: ${category}` : undefined}
       >
         {props.label ?? category}
       </button>

@@ -56,7 +56,7 @@ test('Talousarvio rows retain tilinumero as the Kitsas account mapping', async (
   assert.equal(result.name, '2026 talousarvio');
   assert.equal(result.lines.length, 2);
   assert.deepEqual(result.lines[0], {
-    category: '3010 — Retkituotot',
+    category: '3010: Retkituotot',
     description: 'Retkituotot',
     groupName: 'Varsinaisen toiminnan tuotot',
     kitsasAccount: 3010,
@@ -64,7 +64,7 @@ test('Talousarvio rows retain tilinumero as the Kitsas account mapping', async (
     kind: 'INCOME',
   });
   assert.deepEqual(result.lines[1], {
-    category: '4210 — Retkikulut',
+    category: '4210: Retkikulut',
     description: 'Retkikulut',
     groupName: 'Varsinaisen toiminnan kulut',
     kitsasAccount: 4210,

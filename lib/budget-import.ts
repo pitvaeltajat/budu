@@ -162,7 +162,7 @@ function parseTalousarvio(rows: unknown[][], submittedName: string, year?: numbe
     if (!Number.isFinite(plannedCents)) throw new Error(`Invalid ${selected.year} amount for account ${account}.`);
     // Headings in the sheet are ignored: the account number decides the section.
     lines.push({
-      category: `${account} — ${description}`,
+      category: `${account}: ${description}`,
       description,
       groupName: sectionForAccount(account),
       kitsasAccount: account,

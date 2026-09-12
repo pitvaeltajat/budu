@@ -146,7 +146,7 @@ export function BudgetEditor({
                       aria-invalid={duplicated.has(accountOf(draft))}
                       name={`account:${line.id}`}
                       inputMode="numeric"
-                      placeholder="—"
+                      placeholder="-"
                       value={draft.account}
                       onChange={(event) => set(line.id, { account: event.target.value })}
                     />

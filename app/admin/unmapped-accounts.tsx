@@ -59,8 +59,8 @@ export function UnmappedAccounts({ accounts, currency }: { accounts: UnmappedAcc
               <td>
                 <strong>{row.account}</strong> {row.name || <span className="label">nimi tuntematon</span>}
               </td>
-              <td className="right">{row.debetCents ? money(row.debetCents) : '—'}</td>
-              <td className="right">{row.kreditCents ? money(row.kreditCents) : '—'}</td>
+              <td className="right">{row.debetCents ? money(row.debetCents) : '-'}</td>
+              <td className="right">{row.kreditCents ? money(row.kreditCents) : '-'}</td>
               <td className="right">{row.entries}</td>
             </tr>
           ))}

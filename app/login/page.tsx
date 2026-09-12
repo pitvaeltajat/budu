@@ -13,7 +13,7 @@ const domain = allowedDomains[0] ?? 'pitkajarvenvaeltajat.fi';
 function noticeFor(error: string | undefined) {
   if (!error) return null;
   if (error === 'AccessDenied')
-    return `Tuo tili ei ole PitVan tili. Budu päästää sisään vain @${domain}-osoitteella — henkilökohtainen Gmail ei kelpaa. Vaihda tiliä ja yritä uudelleen, tai pyydä lippukunnan osoitetta pestijohtajalta.`;
+    return `Tuo tili ei ole PitVan tili. Budu päästää sisään vain @${domain}-osoitteella. Henkilökohtainen Gmail ei kelpaa. Vaihda tiliä ja yritä uudelleen, tai pyydä lippukunnan osoitetta pestijohtajalta.`;
   return 'Kirjautuminen ei onnistunut. Yritä hetken kuluttua uudelleen.';
 }
 
