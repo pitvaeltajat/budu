@@ -18,8 +18,8 @@ function authorization(token: string) {
 
 function expensesPath() {
   const path = process.env.KITSAS_EXPENSES_PATH;
-  if (!path) throw new Error('KITSAS_EXPENSES_PATH must be set.');
-  if (!path.startsWith('/')) throw new Error('KITSAS_EXPENSES_PATH must start with /.');
+  if (!path) throw new Error('KITSAS_EXPENSES_PATH puuttuu asetuksista.');
+  if (!path.startsWith('/')) throw new Error('KITSAS_EXPENSES_PATH pitää alkaa /-merkillä.');
   return path;
 }
 
@@ -31,7 +31,7 @@ async function readCloud(cloud: Cloud, path: string, params?: Record<string, str
     headers: { Authorization: authorization(cloud.token), Accept: 'application/json' },
     cache: 'no-store',
   });
-  if (!response.ok) throw new Error(`Kitsas request to ${path} failed (${response.status}).`);
+  if (!response.ok) throw new Error(`Kitsas-pyyntö ${path} epäonnistui (${response.status}).`);
   return response.json();
 }
 
@@ -45,12 +45,12 @@ export function kitsasIsConfigured() {
  * connectivity check for a configured cloud.
  */
 export async function getKitsasInit(): Promise<unknown> {
-  if (!kitsasCloudIsConfigured()) throw new Error('Kitsas is not configured.');
+  if (!kitsasCloudIsConfigured()) throw new Error('Kitsasta ei ole yhdistetty.');
   return readCloud(await getKitsasCloud(), '/init');
 }
 
 export async function getKitsasExpenses(from: string, to: string): Promise<unknown> {
-  if (!kitsasIsConfigured()) throw new Error('Kitsas is not configured.');
+  if (!kitsasIsConfigured()) throw new Error('Kitsasta ei ole yhdistetty.');
   return readCloud(await getKitsasCloud(), expensesPath(), { alkupvm: from, loppupvm: to });
 }
 
@@ -64,7 +64,7 @@ export async function getKitsasExpenses(from: string, to: string): Promise<unkno
  * constant three requests per range rather than one per voucher.
  */
 export async function getKitsasEntries(from: string, to: string): Promise<unknown> {
-  if (!kitsasIsConfigured()) throw new Error('Kitsas is not configured.');
+  if (!kitsasIsConfigured()) throw new Error('Kitsasta ei ole yhdistetty.');
   return readCloud(await getKitsasCloud(), '/viennit', { alkupvm: from, loppupvm: to });
 }
 
@@ -73,7 +73,7 @@ export async function getKitsasEntries(from: string, to: string): Promise<unknow
  * `(pvm, sarja, tunniste)`, which is what `voucherFileKey` matches on.
  */
 export async function getKitsasAttachments(from: string, to: string): Promise<unknown> {
-  if (!kitsasIsConfigured()) throw new Error('Kitsas is not configured.');
+  if (!kitsasIsConfigured()) throw new Error('Kitsasta ei ole yhdistetty.');
   return readCloud(await getKitsasCloud(), '/liitteet', { alkupvm: from, loppupvm: to });
 }
 
@@ -84,15 +84,15 @@ export type KitsasAttachment = { body: ArrayBuffer; contentType: string };
  * `application/json` outright, so ask for the types it actually serves.
  */
 export async function getKitsasAttachment(id: number): Promise<KitsasAttachment> {
-  if (!kitsasCloudIsConfigured()) throw new Error('Kitsas is not configured.');
-  if (!Number.isSafeInteger(id) || id < 1) throw new Error('Invalid Kitsas attachment id.');
+  if (!kitsasCloudIsConfigured()) throw new Error('Kitsasta ei ole yhdistetty.');
+  if (!Number.isSafeInteger(id) || id < 1) throw new Error('Virheellinen liitetunnus.');
   const cloud = await getKitsasCloud();
   const response = await fetch(`${cloud.url}/liitteet/${id}`, {
     method: 'GET',
     headers: { Authorization: authorization(cloud.token), Accept: 'image/jpeg, image/png, application/pdf, text/csv' },
     cache: 'no-store',
   });
-  if (!response.ok) throw new Error(`Kitsas attachment request failed (${response.status}).`);
+  if (!response.ok) throw new Error(`Liitteen haku Kitsaasta epäonnistui (${response.status}).`);
   return {
     body: await response.arrayBuffer(),
     contentType: response.headers.get('content-type') || 'application/octet-stream',
@@ -105,7 +105,7 @@ export async function getKitsasAttachment(id: number): Promise<KitsasAttachment>
  * own `otsikko`, `kommentit` and `loki`, so it is kept for looking one up.
  */
 export async function getKitsasVoucher(id: number): Promise<unknown> {
-  if (!kitsasIsConfigured()) throw new Error('Kitsas is not configured.');
-  if (!Number.isSafeInteger(id) || id < 1) throw new Error('Invalid Kitsas voucher id.');
+  if (!kitsasIsConfigured()) throw new Error('Kitsasta ei ole yhdistetty.');
+  if (!Number.isSafeInteger(id) || id < 1) throw new Error('Virheellinen tositetunnus.');
   return readCloud(await getKitsasCloud(), `${expensesPath()}/${id}`);
 }

@@ -52,7 +52,10 @@ test('no year given still takes the rightmost column', async () => {
 
 test('a year the file does not carry is refused, and says what it has', async () => {
   const { parseBudgetWorksheet } = await import('../lib/budget-import.ts');
-  assert.throws(() => parseBudgetWorksheet(rows, '', 2019), /no 2019 column.*2022, 2023, 2024, 2025, 2025, 2026/s);
+  assert.throws(
+    () => parseBudgetWorksheet(rows, '', 2019),
+    /vuoden 2019 saraketta.*2022, 2023, 2024, 2025, 2025, 2026/s,
+  );
 });
 
 test('the offered years are listed once each', async () => {

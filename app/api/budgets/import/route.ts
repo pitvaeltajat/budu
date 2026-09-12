@@ -15,12 +15,12 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const file = form.get('file');
   if (!(file instanceof File) || !file.size)
-    return Response.json({ error: 'Choose a non-empty CSV or Excel file.' }, { status: 400 });
-  if (file.size > 5_000_000) return Response.json({ error: 'The file must be 5 MB or smaller.' }, { status: 413 });
+    return Response.json({ error: 'Valitse CSV- tai Excel-tiedosto, joka ei ole tyhjä.' }, { status: 400 });
+  if (file.size > 5_000_000) return Response.json({ error: 'Tiedosto saa olla enintään 5 Mt.' }, { status: 413 });
   try {
     const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    if (!sheet) throw new Error('The workbook has no worksheet.');
+    if (!sheet) throw new Error('Työkirjassa ei ole yhtään välilehteä.');
     const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
     const submittedName = String(form.get('name') ?? '').trim();
     /**
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     return Response.json({ id: budget.id, lines: parsed.lines.length }, { status: 201 });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : 'Could not read this file.' },
+      { error: error instanceof Error ? error.message : 'Tiedostoa ei voitu lukea.' },
       { status: 400 },
     );
   }

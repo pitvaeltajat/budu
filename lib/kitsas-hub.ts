@@ -34,7 +34,7 @@ export async function discoverKitsasHub(credentials: KitsasHubCredentials) {
   const connection = await KitsasService.connect({ ...credentials, url });
   const books = await connection.getBooks();
   const selectedBookId = credentials.bookId || books[0]?.id;
-  if (!selectedBookId) throw new Error('The Kitsas user has no accessible books.');
+  if (!selectedBookId) throw new Error('Kitsas-tunnuksella ei ole yhtään kirjanpitoa käytettävissä.');
   const book = await connection.getBook(selectedBookId);
   const [accounts, dimensions, fiscalYears] = await Promise.all([
     book.getAccounts(),

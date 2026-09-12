@@ -158,17 +158,17 @@ export async function syncBudget(
   cache?: VoucherCache,
   onProgress?: (progress: SyncProgress) => void,
 ): Promise<SyncOutcome> {
-  if (!kitsasIsConfigured()) throw new Error('Kitsas has not been configured.');
+  if (!kitsasIsConfigured()) throw new Error('Kitsasta ei ole yhdistetty.');
   const startedAt = Date.now();
   const budget = await prisma.budget.findUnique({ where: { id: budgetId }, include: { lines: true } });
-  if (!budget) throw new Error('Budget not found.');
+  if (!budget) throw new Error('Talousarviota ei löytynyt.');
   // A set, not a map to the lines: nothing in the sync reads a line any more.
   // Which side of an entry counts, and under which heading it appears, are the
   // budget's business and are resolved when the dashboard renders.
   const accounts = new Set(
     budget.lines.map((line) => line.kitsasAccount).filter((account): account is number => account !== null),
   );
-  if (!accounts.size) throw new Error('Add an account column to the budget before syncing Kitsas.');
+  if (!accounts.size) throw new Error('Lisää talousarvion riveille Kitsas-tilit ennen kuin haet kirjauksia.');
 
   const ranges = syncRanges(budget.startsOn, budget.endsOn, new Date());
   const sync = await prisma.syncRun.create({ data: { budgetId: budget.id, source: 'KITSAS', status: 'RUNNING' } });
@@ -177,7 +177,7 @@ export async function syncBudget(
     const listed: { id: number; otsikko: string; signature: string }[] = [];
     for (const range of ranges) {
       const list = await getKitsasExpenses(range.from, range.to);
-      if (!Array.isArray(list)) throw new Error('Kitsas voucher list had an unexpected response shape.');
+      if (!Array.isArray(list)) throw new Error('Kitsaan tositelista oli odottamattomassa muodossa.');
       for (const raw of list as VoucherListItem[]) {
         const id = asNumber(raw.id);
         if (!Number.isSafeInteger(id)) continue;
@@ -219,7 +219,7 @@ export async function syncBudget(
           getKitsasEntries(range.from, range.to),
           getKitsasAttachments(range.from, range.to),
         ]);
-        if (!Array.isArray(entries)) throw new Error('Kitsas entry list had an unexpected response shape.');
+        if (!Array.isArray(entries)) throw new Error('Kitsaan vientilista oli odottamattomassa muodossa.');
         rebuilt = vouchersFromEntries(entries, files);
         fetchedFromKitsas++;
         cache?.set(key, rebuilt);
@@ -391,7 +391,7 @@ export async function syncBudget(
       where: { id: sync.id },
       data: {
         status: 'FAILED',
-        detail: error instanceof Error ? error.message : 'Unknown error',
+        detail: error instanceof Error ? error.message : 'Tuntematon virhe',
         completedAt: new Date(),
       },
     });

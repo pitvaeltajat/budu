@@ -68,7 +68,7 @@ function unique(lines: BudgetImportLine[]) {
   const duplicate = lines
     .map((line) => line.category.toLowerCase())
     .find((value, index, all) => all.indexOf(value) !== index);
-  if (duplicate) throw new Error(`Categories must be unique. Duplicate: ${duplicate}`);
+  if (duplicate) throw new Error(`Talousarvion kohtien nimien pitää olla erilaiset. Sama nimi kahdesti: ${duplicate}`);
   return lines;
 }
 
@@ -89,11 +89,11 @@ function parseSimpleBudget(records: RecordRow[], submittedName: string): ParsedB
       };
     })
     .filter((line) => line.category || Number.isFinite(line.plannedCents));
-  if (!lines.length) throw new Error('No budget rows were found.');
+  if (!lines.length) throw new Error('Tiedostosta ei löytynyt yhtään talousarvion riviä.');
   if (lines.some((line) => !line.category || !Number.isFinite(line.plannedCents)))
-    throw new Error('Every row needs a category and a valid planned amount.');
+    throw new Error('Jokaisella rivillä pitää olla nimi ja kelvollinen summa.');
   if (lines.some((line) => line.kitsasAccount !== undefined && !Number.isInteger(line.kitsasAccount)))
-    throw new Error('Account must be an integer Kitsas account number.');
+    throw new Error('Tilin pitää olla Kitsaan tilinumero, esimerkiksi 4210.');
   const first = records[0] || {};
   const value = (key: string) => Object.entries(first).find(([name]) => normalized(name) === key)?.[1];
   return {
@@ -110,7 +110,7 @@ function parseSimpleBudget(records: RecordRow[], submittedName: string): ParsedB
  */
 function yearColumns(rows: unknown[][]) {
   const yearRow = rows.find((row) => row.some((value) => /^20\d{2}$/.test(text(value))));
-  if (!yearRow) throw new Error('Could not find a year row in the Talousarvio file.');
+  if (!yearRow) throw new Error('Talousarviotiedostosta ei löytynyt vuosiriviä.');
   return yearRow
     .map((value, index) => ({ year: Number(text(value)), index }))
     .filter(({ year }) => Number.isInteger(year) && year >= 2000);
@@ -146,8 +146,8 @@ function parseTalousarvio(rows: unknown[][], submittedName: string, year?: numbe
     const offered = years.map((column) => column.year).join(', ');
     throw new Error(
       year === undefined
-        ? 'Could not find a budget-year column.'
-        : `The file has no ${year} column. It offers: ${offered || 'none'}.`,
+        ? 'Talousarviotiedostosta ei löytynyt vuosisaraketta.'
+        : `Tiedostossa ei ole vuoden ${year} saraketta. Tarjolla: ${offered || 'ei yhtään'}.`,
     );
   }
   const lines: BudgetImportLine[] = [];
@@ -159,7 +159,7 @@ function parseTalousarvio(rows: unknown[][], submittedName: string, year?: numbe
     // Empty plan cells in this particular budget mean no allocation, rather
     // than an invalid row. Keep them so every Kitsas account remains mapped.
     const plannedCents = planned ? euroCents(planned) : 0;
-    if (!Number.isFinite(plannedCents)) throw new Error(`Invalid ${selected.year} amount for account ${account}.`);
+    if (!Number.isFinite(plannedCents)) throw new Error(`Vuoden ${selected.year} summa ei kelpaa tilillä ${account}.`);
     // Headings in the sheet are ignored: the account number decides the section.
     lines.push({
       category: `${account}: ${description}`,
@@ -174,7 +174,7 @@ function parseTalousarvio(rows: unknown[][], submittedName: string, year?: numbe
     (a, b) =>
       sectionSortKey(a.kitsasAccount!) - sectionSortKey(b.kitsasAccount!) || a.kitsasAccount! - b.kitsasAccount!,
   );
-  if (!lines.length) throw new Error('No account rows were found in the Talousarvio file.');
+  if (!lines.length) throw new Error('Talousarviotiedostosta ei löytynyt yhtään tiliriviä.');
   return {
     name: submittedName || `${selected.year} talousarvio`,
     currency: 'EUR',

@@ -6,11 +6,11 @@ import { getKitsasInit } from '@/lib/kitsas';
 /** Only reads the Hub account catalogue and the cloud's own /init. It never calls a Kitsas write method. */
 export async function GET() {
   const session = await auth();
-  if (!session?.user?.id) return Response.json({ error: 'Sign in required.' }, { status: 401 });
+  if (!session?.user?.id) return Response.json({ error: 'Kirjautuminen vaaditaan.' }, { status: 401 });
   const username = process.env.KITSAS_HUB_USERNAME;
   const password = process.env.KITSAS_HUB_PASSWORD;
   if (!username || !password)
-    return Response.json({ error: 'KitsasHub credentials are not configured.' }, { status: 409 });
+    return Response.json({ error: 'KitsasHubin tunnuksia ei ole määritetty.' }, { status: 409 });
   try {
     const hub = await discoverKitsasHub({
       username,
@@ -21,7 +21,7 @@ export async function GET() {
     return Response.json({ ...hub, cloud: await describeCloud() });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : 'KitsasHub discovery failed.' },
+      { error: error instanceof Error ? error.message : 'KitsasHubin haku epäonnistui.' },
       { status: 502 },
     );
   }
@@ -41,6 +41,9 @@ async function describeCloud() {
       .catch(() => false);
     return { configured: true as const, id: cloud.id, name: cloud.name, url: cloud.url, reachable };
   } catch (error) {
-    return { configured: true as const, error: error instanceof Error ? error.message : 'Kitsas cloud login failed.' };
+    return {
+      configured: true as const,
+      error: error instanceof Error ? error.message : 'Kitsas-pilveen kirjautuminen epäonnistui.',
+    };
   }
 }

@@ -35,25 +35,25 @@ export function resetKitsasCloudCache() {
 async function loginToCloud(): Promise<KitsasCloud> {
   const email = process.env.KITSAS_HUB_USERNAME;
   const password = process.env.KITSAS_HUB_PASSWORD;
-  if (!email || !password) throw new Error('Kitsas credentials are not configured.');
+  if (!email || !password) throw new Error('Kitsaan tunnuksia ei ole määritetty.');
   const response = await fetch(`${kitsasHubUrl()}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ email, password, application: 'Budu' }),
     cache: 'no-store',
   });
-  if (!response.ok) throw new Error(`Kitsas login failed (${response.status}).`);
+  if (!response.ok) throw new Error(`Kitsaaseen kirjautuminen epäonnistui (${response.status}).`);
   const body = (await response.json()) as CompatibilityLogin;
   const clouds = Array.isArray(body.clouds) ? (body.clouds as CompatibilityCloud[]) : [];
   const usable = clouds.filter(
     (cloud) => typeof cloud.url === 'string' && cloud.url && typeof cloud.token === 'string' && cloud.token,
   );
-  if (!usable.length) throw new Error('The Kitsas user has no accessible clouds.');
+  if (!usable.length) throw new Error('Kitsas-tunnuksella ei ole yhtään pilveä käytettävissä.');
   const wanted = process.env.KITSAS_CLOUD_ID;
   const selected = wanted
     ? usable.find((cloud) => String(cloud.id) === wanted)
     : usable.find((cloud) => cloud.active !== false) || usable[0];
-  if (!selected) throw new Error(`Kitsas cloud ${wanted} is not accessible to this user.`);
+  if (!selected) throw new Error(`Kitsas-pilvi ${wanted} ei ole tämän tunnuksen käytettävissä.`);
   return {
     id: Number(selected.id),
     name: typeof selected.name === 'string' ? selected.name : `Cloud ${selected.id}`,

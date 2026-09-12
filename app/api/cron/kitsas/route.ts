@@ -10,7 +10,7 @@ export const maxDuration = 300;
 
 function authorize(request: Request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return 'CRON_SECRET is not configured.';
+  if (!secret) return 'CRON_SECRET puuttuu asetuksista.';
   if (request.headers.get('authorization') !== `Bearer ${secret}`) return 'Unauthorized.';
   return null;
 }
@@ -18,7 +18,7 @@ function authorize(request: Request) {
 export async function GET(request: Request) {
   const denied = authorize(request);
   if (denied) return Response.json({ error: denied }, { status: 401 });
-  if (!kitsasIsConfigured()) return Response.json({ error: 'Kitsas has not been configured.' }, { status: 409 });
+  if (!kitsasIsConfigured()) return Response.json({ error: 'Kitsasta ei ole yhdistetty.' }, { status: 409 });
 
   /** Incremental unless asked otherwise; the schedule decides which runs when. */
   const mode: SyncMode = new URL(request.url).searchParams.get('mode') === 'full' ? 'full' : 'incremental';
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     try {
       results.push(await syncBudget(budgetId, mode, cache));
     } catch (error) {
-      results.push({ budgetId, mode, error: error instanceof Error ? error.message : 'Unknown error' });
+      results.push({ budgetId, mode, error: error instanceof Error ? error.message : 'Tuntematon virhe' });
     }
   }
   return Response.json({ mode, budgets: budgetIds.length, results });
