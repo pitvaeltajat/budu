@@ -37,7 +37,7 @@ export default async function AdminPage({
         </div>
         <div className="user">
           <Link href="/">Etusivulle</Link>
-          <span>{session.user.email}</span>
+          <span>{session.user.name || session.user.email}</span>
         </div>
       </header>
       {body}

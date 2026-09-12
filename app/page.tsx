@@ -108,7 +108,7 @@ export default async function Home({
         </div>
         <div className="user">
           {admin && <Link href="/admin">Ylläpito</Link>}
-          <span>{session.user.email}</span>
+          <span>{session.user.name || session.user.email}</span>
           <form
             action={async () => {
               'use server';
