@@ -18,9 +18,19 @@ function noticeFor(error: string | undefined) {
 }
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string | string[] }> }) {
-  if (await auth()) redirect('/');
+  // The same test `/` applies, not merely "is there a session". With the cookie
+  // shared across pitva.fi, a session minted on Klapi identifies someone Budu's
+  // domain fence still refuses, and `session()` marks that by leaving `user.id`
+  // unset. Redirecting on the weaker test sent those sessions back to `/`,
+  // which sent them here again — an endless 307 loop, escapable only by signing
+  // in somewhere else on pitva.fi with a Workspace account.
+  const session = await auth();
+  if (session?.user?.id) redirect('/');
   const { error } = await searchParams;
-  const notice = noticeFor(Array.isArray(error) ? error[0] : error);
+  // A fenced-out session lands here with no `?error=`, so it would otherwise be
+  // offered the sign-in button with no hint that the account it already holds
+  // is the problem. AccessDenied is exactly that explanation.
+  const notice = noticeFor((Array.isArray(error) ? error[0] : error) ?? (session ? 'AccessDenied' : undefined));
   return (
     <main className="signin">
       <section className="card">
