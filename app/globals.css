@@ -298,7 +298,17 @@ tr:last-child td {
 .actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
+  /* Breathing room on both sides: this row carries no surface of its own, so
+     without it the button sits flush against the cards above and below. The
+     padding owns that space now, so the paragraph's default margins go: as a
+     flex item they used to set the row's height, which is why the text never
+     lined up with the button. */
+  padding: 12px 0;
+}
+.actions p {
+  margin: 0;
 }
 .button {
   display: inline-flex;
