@@ -20,7 +20,7 @@
  * not solids, so below about 32 the strokes and the gaps between them both fall
  * under a device pixel and the mark collapses into a grey smudge.
  */
-export function PitvaMark({ size = 34 }: { size?: number }) {
+export function PitvaMark({ size = 32 }: { size?: number }) {
   return (
     <svg viewBox="227 226 939 939" width={size} height={size} fill="currentColor" aria-hidden="true" focusable="false">
       <g transform="translate(0,1400) scale(0.1,-0.1)">

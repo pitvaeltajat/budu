@@ -9,6 +9,7 @@ import { OtherBudgets } from './other-budgets';
 import { UnmappedAccounts } from './unmapped-accounts';
 import { KitsasRefetch } from './kitsas-refetch';
 import { PeriodSwitcher } from '../period-switcher';
+import { PitvaMark } from '../pitva-logo';
 
 /** The Kitsas button's server action runs here, and a sync of the whole book takes a while. */
 export const maxDuration = 300;
@@ -29,23 +30,26 @@ export default async function AdminPage({
   if (!session?.user?.id) redirect('/login');
 
   const shell = (body: React.ReactNode) => (
-    <main className="shell">
+    <>
       <header className="topbar">
-        <div className="brand-group">
-          <Link className="brand" href="/">
-            BUDU
-          </Link>
-          <a className="uplink" href="https://atk.pitva.fi" title="Kaikki PitVan palvelut">
-            ← ATK
-          </a>
-        </div>
-        <div className="user">
-          <Link href="/">Etusivulle</Link>
-          <span>{session.user.name || session.user.email}</span>
+        <div className="topbar-inner">
+          <div className="brand-group">
+            <Link className="brand" href="/">
+              <PitvaMark />
+              BUDU
+            </Link>
+            <a className="uplink" href="https://atk.pitva.fi" title="Kaikki PitVan palvelut">
+              ← ATK
+            </a>
+          </div>
+          <div className="user">
+            <Link href="/">Etusivulle</Link>
+            <span>{session.user.name || session.user.email}</span>
+          </div>
         </div>
       </header>
-      {body}
-    </main>
+      <main className="shell">{body}</main>
+    </>
   );
 
   if (!isAdminEmail(session.user.email)) {

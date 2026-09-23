@@ -59,19 +59,31 @@ button:hover {
 .shell {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 0 16px 56px;
+  padding: 40px 16px 56px;
 }
+/*
+ * Klapi's top bar is the baseline for every PitVa service: navy from edge to
+ * edge, with its contents held to the same 1280px column as the page below.
+ * The measurements here are Klapi's Tailwind classes written out (h-16,
+ * container px-4, shadow-xs), so change them there first.
+ */
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+.topbar-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  min-height: 64px;
-  margin: 0 -16px 40px;
+  max-width: 1280px;
+  height: 64px;
+  margin: 0 auto;
   padding: 0 16px;
-  background: var(--primary);
-  color: var(--primary-foreground);
-  box-shadow: 0 1px 3px rgb(34 30 93 / 18%);
 }
 /*
  * The wordmark and the way back out. Grouped so the topbar's space-between
@@ -81,9 +93,9 @@ button:hover {
  */
 .brand-group {
   display: flex;
+  flex: none;
   align-items: center;
-  gap: 14px;
-  min-width: 0;
+  gap: 16px;
 }
 /*
  * Deliberately quieter than the wordmark: this is the exit, not the identity.
@@ -93,6 +105,7 @@ button:hover {
 .uplink {
   color: inherit;
   font-size: 14px;
+  font-weight: 500;
   text-decoration: none;
   opacity: 0.8;
   white-space: nowrap;
@@ -109,8 +122,8 @@ button:hover {
   align-items: center;
   gap: 10px;
   color: inherit;
-  font-size: 22px;
-  font-weight: 650;
+  font-size: 24px;
+  font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1;
   text-decoration: none;
@@ -128,11 +141,21 @@ button:hover {
 .brand:hover {
   transform: scale(1.05);
 }
+/* Klapi's nav links: medium weight, underlined only on hover. */
 .user {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 14px;
+  gap: 24px;
+  font-weight: 500;
+}
+.user a,
+.user .link-button {
+  text-decoration: none;
+}
+.user a:hover,
+.user .link-button:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 .link-button {
   border: 0;
@@ -261,6 +284,13 @@ thead th {
   border-bottom: 0;
   background: var(--card);
   box-shadow: inset 0 -1px 0 var(--border);
+}
+/* On the page they stick to the viewport, so they stop under the sticky topbar; in a modal, to its own scroll. */
+.shell thead th {
+  top: 64px;
+}
+.shell .modal thead th {
+  top: 0;
 }
 th,
 td {
@@ -438,8 +468,8 @@ select:focus-visible {
   .grid {
     grid-template-columns: 1fr;
   }
-  .topbar {
-    margin-bottom: 28px;
+  .shell {
+    padding-top: 28px;
   }
   h1 {
     font-size: 30px;
@@ -451,36 +481,27 @@ select:focus-visible {
  * spends most of a phone screen restating what fits in half of it.
  */
 @media (max-width: 560px) {
+  /* 16px gutter, as Klapi keeps on phones, so the page lines up under the bar. */
   .shell {
-    padding: 0 12px 40px;
+    padding: 24px 16px 40px;
   }
-  .topbar {
-    margin: 0 -12px 24px;
-    padding: 0 12px;
+  .topbar-inner {
     gap: 10px;
   }
-  .brand {
-    font-size: 20px;
-  }
-  /*
-   * One row, with the address giving up its width first — it is the only part
-   * that can be truncated and still read. The two controls hold their size and
-   * refuse to wrap; "Kirjaudu ulos" broken across two lines reads as a fault.
-   */
+  /* One row. The controls refuse to wrap; "Kirjaudu ulos" broken across two lines reads as a fault. */
   .user {
-    gap: 10px;
+    gap: 12px;
     min-width: 0;
-    font-size: 13px;
+    font-size: 14px;
     white-space: nowrap;
   }
   .user > a,
   .user > form {
     flex: 0 0 auto;
   }
+  /* Klapi drops its nav links at this width too; beside a full-size wordmark there is no room for a name. */
   .user > span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    display: none;
   }
   .card {
     padding: 16px;

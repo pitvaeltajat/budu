@@ -93,50 +93,54 @@ export default async function Home({
   // rather than as a confident row of zeroes.
   const awaitingKitsas = Boolean(budget) && kitsasIsConfigured() && !lastSync;
   return (
-    <main className="shell">
+    <>
       <header className="topbar">
-        <div className="brand-group">
-          <Link className="brand" href="/">
-            <PitvaMark />
-            BUDU
-          </Link>
-          {/* Back to the front door that issued this session. A plain <a> and
+        <div className="topbar-inner">
+          <div className="brand-group">
+            <Link className="brand" href="/">
+              <PitvaMark />
+              BUDU
+            </Link>
+            {/* Back to the front door that issued this session. A plain <a> and
               not next/link: it leaves the app for another origin. */}
-          <a className="uplink" href="https://atk.pitva.fi" title="Kaikki PitVan palvelut">
-            ← ATK
-          </a>
-        </div>
-        <div className="user">
-          {admin && <Link href="/admin">Ylläpito</Link>}
-          <span>{session.user.name || session.user.email}</span>
-          <form
-            action={async () => {
-              'use server';
-              await signOut({ redirectTo: '/login' });
-            }}
-          >
-            <button className="link-button">Kirjaudu ulos</button>
-          </form>
+            <a className="uplink" href="https://atk.pitva.fi" title="Kaikki PitVan palvelut">
+              ← ATK
+            </a>
+          </div>
+          <div className="user">
+            {admin && <Link href="/admin">Ylläpito</Link>}
+            <span>{session.user.name || session.user.email}</span>
+            <form
+              action={async () => {
+                'use server';
+                await signOut({ redirectTo: '/login' });
+              }}
+            >
+              <button className="link-button">Kirjaudu ulos</button>
+            </form>
+          </div>
         </div>
       </header>
-      {budget ? (
-        <Dashboard
-          budget={budget}
-          entries={entries}
-          admin={admin}
-          configured={kitsasIsConfigured()}
-          lastFetchedAt={lastSync?.completedAt ?? null}
-          awaitingKitsas={awaitingKitsas}
-          periods={periods}
-          unmapped={{
-            accounts: unmapped?._count ?? 0,
-            cents: (unmapped?._sum.debetCents ?? 0) + (unmapped?._sum.kreditCents ?? 0),
-          }}
-        />
-      ) : (
-        <Setup admin={admin} />
-      )}
-    </main>
+      <main className="shell">
+        {budget ? (
+          <Dashboard
+            budget={budget}
+            entries={entries}
+            admin={admin}
+            configured={kitsasIsConfigured()}
+            lastFetchedAt={lastSync?.completedAt ?? null}
+            awaitingKitsas={awaitingKitsas}
+            periods={periods}
+            unmapped={{
+              accounts: unmapped?._count ?? 0,
+              cents: (unmapped?._sum.debetCents ?? 0) + (unmapped?._sum.kreditCents ?? 0),
+            }}
+          />
+        ) : (
+          <Setup admin={admin} />
+        )}
+      </main>
+    </>
   );
 }
 
