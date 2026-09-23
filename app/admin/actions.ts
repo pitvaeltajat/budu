@@ -5,6 +5,8 @@ import { adminSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { typedEuroCents } from '@/lib/euro';
 import { duplicateAccounts, parseAccount, INVALID_ACCOUNT } from '@/lib/budget-mapping';
+import { kitsasIsConfigured } from '@/lib/kitsas';
+import { syncAllBudgets } from '@/lib/kitsas-sync';
 
 export type AdminState = { ok?: string; error?: string };
 
@@ -124,4 +126,19 @@ export async function deleteBudget(_previous: AdminState, formData: FormData): P
   revalidatePath('/');
   revalidatePath('/admin');
   return { ok: `Poistettu: ${budget.name}.` };
+}
+
+/** The daily cron's incremental sync, on demand. Kitsas is only read. */
+export async function refetchKitsas(): Promise<AdminState> {
+  const { error } = await adminSession();
+  if (error) return { error };
+  if (!kitsasIsConfigured()) return { error: 'Kitsasta ei ole yhdistetty.' };
+
+  const { results } = await syncAllBudgets('incremental');
+  revalidatePath('/');
+  revalidatePath('/admin');
+  const failed = results.filter((result) => 'error' in result);
+  if (failed.length) return { error: `Haku epäonnistui: ${failed.map((result) => result.error).join(' ')}` };
+  const imported = results.reduce((sum, result) => sum + ('imported' in result ? result.imported : 0), 0);
+  return { ok: `Haettu Kitsaasta: ${imported} ${imported === 1 ? 'kirjaus' : 'kirjausta'} päivittyi.` };
 }

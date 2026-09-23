@@ -407,3 +407,22 @@ export async function syncableBudgetIds() {
   });
   return budgets.map((budget) => budget.id);
 }
+
+/**
+ * Syncs every budget that reads Kitsas: the cron's run, and the admin's button.
+ * One budget failing does not stop the rest; its error takes its place.
+ */
+export async function syncAllBudgets(mode: SyncMode) {
+  const budgetIds = await syncableBudgetIds();
+  // One cache for the whole run: every budget reads the same book.
+  const cache: VoucherCache = new Map();
+  const results: (SyncOutcome | { budgetId: string; mode: SyncMode; error: string })[] = [];
+  for (const budgetId of budgetIds) {
+    try {
+      results.push(await syncBudget(budgetId, mode, cache));
+    } catch (error) {
+      results.push({ budgetId, mode, error: error instanceof Error ? error.message : 'Tuntematon virhe' });
+    }
+  }
+  return { mode, budgets: budgetIds.length, results };
+}

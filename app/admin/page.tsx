@@ -7,7 +7,11 @@ import { BudgetEditor } from './budget-editor';
 import { BudgetUpload } from './budget-upload';
 import { OtherBudgets } from './other-budgets';
 import { UnmappedAccounts } from './unmapped-accounts';
+import { KitsasRefetch } from './kitsas-refetch';
 import { PeriodSwitcher } from '../period-switcher';
+
+/** The Kitsas button's server action runs here, and a sync of the whole book takes a while. */
+export const maxDuration = 300;
 
 const date = (value: Date) => new Intl.DateTimeFormat('fi-FI').format(value);
 
@@ -116,6 +120,8 @@ export default async function AdminPage({
       )}
 
       {selected && <UnmappedAccounts accounts={unmapped} currency={selected.currency} />}
+
+      <KitsasRefetch />
 
       <BudgetUpload replacing={periods[0]?.name ?? null} />
       {previous.length > 0 && (
