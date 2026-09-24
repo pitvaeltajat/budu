@@ -16,7 +16,7 @@
 /**
  * The four arrows, for small sizes where the ring text would not survive.
  *
- * 34px rather than something tidier like 24: the arrows are drawn as outlines,
+ * 32px, as in Klapi, rather than something tidier like 24: the arrows are drawn as outlines,
  * not solids, so below about 32 the strokes and the gaps between them both fall
  * under a device pixel and the mark collapses into a grey smudge.
  */
@@ -84,5 +84,35 @@ export function PitvaLogo({ size = 116, title }: { size?: number; title?: string
         <path d="M6569 1285 c-11 -28 -54 -606 -54 -735 l0 -105 80 0 80 0 7 159 c4 88 11 163 16 168 4 4 113 10 242 12 301 5 362 21 443 117 68 79 71 189 6 279 -69 95 -169 117 -558 122 -246 3 -254 2 -262 -17z m631 -125 c34 -19 49 -36 64 -73 20 -47 20 -47 0 -94 -15 -38 -28 -52 -67 -71 -64 -33 -195 -46 -362 -35 l-130 8 3 135 c1 74 5 141 7 148 4 11 48 13 223 10 210 -3 218 -4 262 -28z" />
       </g>
     </svg>
+  );
+}
+
+/**
+ * The way back to atk.pitva.fi, the front door that issued this session. A pill
+ * with Lucide's LayoutGrid, as Klapi draws it: "all services", not "back". A
+ * plain <a> and not next/link, because it leaves the app for another origin.
+ */
+export function AtkLink() {
+  return (
+    <a className="uplink" href="https://atk.pitva.fi" title="Kaikki PitVan palvelut">
+      <svg
+        viewBox="0 0 24 24"
+        width="13"
+        height="13"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <rect width="7" height="7" x="3" y="3" rx="1" />
+        <rect width="7" height="7" x="14" y="3" rx="1" />
+        <rect width="7" height="7" x="14" y="14" rx="1" />
+        <rect width="7" height="7" x="3" y="14" rx="1" />
+      </svg>
+      ATK
+    </a>
   );
 }

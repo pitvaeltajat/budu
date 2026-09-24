@@ -14,7 +14,7 @@ import { CategoryDetail, type CategoryDetailProps } from './category-detail';
 import { Overview } from './overview';
 import { KitsasPending, Pending } from './kitsas-pending';
 import { PeriodSwitcher, type Period } from './period-switcher';
-import { PitvaMark } from './pitva-logo';
+import { AtkLink, PitvaMark } from './pitva-logo';
 
 const money = (cents: number, currency = 'EUR') =>
   new Intl.NumberFormat('fi-FI', { style: 'currency', currency }).format(cents / 100);
@@ -101,11 +101,7 @@ export default async function Home({
               <PitvaMark />
               BUDU
             </Link>
-            {/* Back to the front door that issued this session. A plain <a> and
-              not next/link: it leaves the app for another origin. */}
-            <a className="uplink" href="https://atk.pitva.fi" title="Kaikki PitVan palvelut">
-              ← ATK
-            </a>
+            <AtkLink />
           </div>
           <div className="user">
             {admin && <Link href="/admin">Ylläpito</Link>}

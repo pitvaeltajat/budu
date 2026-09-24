@@ -9,7 +9,7 @@ import { OtherBudgets } from './other-budgets';
 import { UnmappedAccounts } from './unmapped-accounts';
 import { KitsasRefetch } from './kitsas-refetch';
 import { PeriodSwitcher } from '../period-switcher';
-import { PitvaMark } from '../pitva-logo';
+import { AtkLink, PitvaMark } from '../pitva-logo';
 
 /** The Kitsas button's server action runs here, and a sync of the whole book takes a while. */
 export const maxDuration = 300;
@@ -38,9 +38,7 @@ export default async function AdminPage({
               <PitvaMark />
               BUDU
             </Link>
-            <a className="uplink" href="https://atk.pitva.fi" title="Kaikki PitVan palvelut">
-              ← ATK
-            </a>
+            <AtkLink />
           </div>
           <div className="user">
             <Link href="/">Etusivulle</Link>
