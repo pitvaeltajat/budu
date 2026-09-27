@@ -372,7 +372,7 @@ function Dashboard({
     null,
   );
   /** The table's sections, each carrying its own totals; see lib/budget-groups.ts. */
-  const sections = sectionsOf(budget.lines, byCategory, previousByCategory);
+  const sections = sectionsOf(budget.lines, byCategory, previousByCategory, previousFullByCategory);
   /**
    * Everything a line's modal needs, keyed by category and built once. The
    * table, the overview's alerts and the recent-expense list all open the same
@@ -401,10 +401,16 @@ function Dashboard({
    * and stack each line into a card, where every figure has to carry its own
    * label — so the same four strings are read twice, and a closed period must
    * not be able to say "Tänä vuonna" in the header and "Kaudella" on the card.
+   *
+   * "Viime vuonna" is always the whole of last year: a line booked late in the
+   * year, like the calendar sale, would otherwise read 0 € all autumn. An open
+   * period adds last year up to today beside it for the like-for-like view; a
+   * closed one has no need, because both would be the same full year.
    */
   const columns = {
     planned: 'Arvio',
     used: closed ? 'Kaudella' : 'Tänä vuonna',
+    priorToDate: 'Viime v. samaan aikaan',
     prior: closed ? `Vuonna ${priorYear}` : 'Viime vuonna',
     remaining: 'Jäljellä',
   };
@@ -424,7 +430,7 @@ function Dashboard({
       <p className="lede">
         {closed
           ? `Koko kausi verrattuna vuoteen ${priorYear}.`
-          : 'Kuluva kausi verrattuna viime vuoden vastaavaan ajankohtaan.'}
+          : 'Kuluva kausi verrattuna viime vuoteen, sekä samaan aikaan että koko vuonna.'}
       </p>
       {!configured && <p className="notice">Kitsasta ei ole vielä yhdistetty. Mitään tietoja ei haeta ulkopuolelta.</p>}
       {unmapped.accounts > 0 && (
@@ -502,6 +508,7 @@ function Dashboard({
                 <th>Kohta</th>
                 <th className="right">{columns.planned}</th>
                 <th className="right">{columns.used}</th>
+                {!closed && <th className="right">{columns.priorToDate}</th>}
                 <th className="right">{columns.prior}</th>
                 <th className="right">{columns.remaining}</th>
               </tr>
@@ -511,7 +518,7 @@ function Dashboard({
                 <Fragment key={section.name ?? 'ryhmittelemattomat'}>
                   {section.name && (
                     <tr className="group-row">
-                      <th colSpan={5} scope="colgroup">
+                      <th colSpan={closed ? 5 : 6} scope="colgroup">
                         {section.name}
                       </th>
                     </tr>
@@ -519,6 +526,7 @@ function Dashboard({
                   {section.lines.map((line) => {
                     const used = byCategory.get(line.category) || 0;
                     const prior = previousByCategory.get(line.category) || 0;
+                    const priorFull = previousFullByCategory.get(line.category) || 0;
                     const status = awaitingKitsas ? null : rowStatus(line.kind, line.plannedCents, used, prior);
                     return (
                       <tr key={line.id}>
@@ -537,8 +545,13 @@ function Dashboard({
                         <td className="right" data-label={columns.used}>
                           {awaitingKitsas ? <Pending /> : money(used, budget.currency)}
                         </td>
+                        {!closed && (
+                          <td className="right" data-label={columns.priorToDate}>
+                            {awaitingKitsas ? <Pending /> : money(prior, budget.currency)}
+                          </td>
+                        )}
                         <td className="right" data-label={columns.prior}>
-                          {awaitingKitsas ? <Pending /> : money(prior, budget.currency)}
+                          {awaitingKitsas ? <Pending /> : money(priorFull, budget.currency)}
                         </td>
                         <td
                           className={`right${status?.tone === 'over' ? ' negative' : ''}`}
@@ -563,8 +576,13 @@ function Dashboard({
                         <td className="right" data-label={columns.used}>
                           {awaitingKitsas ? <Pending /> : money(total.usedCents, budget.currency)}
                         </td>
+                        {!closed && (
+                          <td className="right" data-label={columns.priorToDate}>
+                            {awaitingKitsas ? <Pending /> : money(total.priorCents, budget.currency)}
+                          </td>
+                        )}
                         <td className="right" data-label={columns.prior}>
-                          {awaitingKitsas ? <Pending /> : money(total.priorCents, budget.currency)}
+                          {awaitingKitsas ? <Pending /> : money(total.priorFullCents, budget.currency)}
                         </td>
                         <td
                           className={`right${

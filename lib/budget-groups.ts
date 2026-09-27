@@ -21,19 +21,22 @@ export type SectionTotal = {
   plannedCents: number;
   usedCents: number;
   priorCents: number;
+  priorFullCents: number;
 };
 
 export type Section<T> = { name: string | null; lines: T[]; totals: SectionTotal[] };
 
 /**
- * `used` and `prior` are keyed by category, which is how the dashboard already
- * holds its realized figures; a row missing from them has simply had nothing
- * booked to it.
+ * `used`, `prior` and `priorFull` are keyed by category, which is how the
+ * dashboard already holds its realized figures; a row missing from them has
+ * simply had nothing booked to it. `prior` is last year up to the same date,
+ * `priorFull` the whole of last year.
  */
 export function sectionsOf<T extends GroupableLine>(
   lines: T[],
   used: Map<string, number>,
   prior: Map<string, number>,
+  priorFull: Map<string, number> = new Map(),
 ): Section<T>[] {
   const sections: Section<T>[] = [];
   for (const line of lines) {
@@ -47,13 +50,14 @@ export function sectionsOf<T extends GroupableLine>(
     // section the same way the rows above them do.
     let total = section.totals.find((candidate) => candidate.kind === line.kind);
     if (!total) {
-      total = { kind: line.kind, rows: 0, plannedCents: 0, usedCents: 0, priorCents: 0 };
+      total = { kind: line.kind, rows: 0, plannedCents: 0, usedCents: 0, priorCents: 0, priorFullCents: 0 };
       section.totals.push(total);
     }
     total.rows += 1;
     total.plannedCents += line.plannedCents;
     total.usedCents += used.get(line.category) ?? 0;
     total.priorCents += prior.get(line.category) ?? 0;
+    total.priorFullCents += priorFull.get(line.category) ?? 0;
   }
   return sections;
 }

@@ -548,9 +548,9 @@ select:focus-visible {
   }
 }
 /*
- * Below this the five money columns cannot be told apart, so each budget line
+ * Below this the money columns cannot be told apart, so each budget line
  * stops being a row and becomes a card: the name and its badge across the top,
- * then the four figures two-abreast, each carrying the heading the (now hidden)
+ * then the figures two-abreast, each carrying the heading the (now hidden)
  * header row used to supply. Without this the table simply runs off the side and
  * takes the whole page's horizontal scroll with it — "Viime vuonna" and
  * "Jäljellä" were unreachable rather than merely cramped.

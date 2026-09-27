@@ -30,7 +30,7 @@ test('rows are grouped into the sections they are headed by', () => {
     ['Tuotot', 'Kulut'],
   );
   assert.deepEqual(sections[0].totals, [
-    { kind: 'INCOME', rows: 2, plannedCents: 8000, usedCents: 3000, priorCents: 1000 },
+    { kind: 'INCOME', rows: 2, plannedCents: 8000, usedCents: 3000, priorCents: 1000, priorFullCents: 0 },
   ]);
 });
 
@@ -48,14 +48,16 @@ test('a section holding both kinds is totalled separately for each', () => {
   );
   assert.equal(sections.length, 1);
   assert.deepEqual(sections[0].totals, [
-    { kind: 'INCOME', rows: 1, plannedCents: 5000, usedCents: 1000, priorCents: 900 },
-    { kind: 'EXPENSE', rows: 2, plannedCents: 4000, usedCents: 2500, priorCents: 100 },
+    { kind: 'INCOME', rows: 1, plannedCents: 5000, usedCents: 1000, priorCents: 900, priorFullCents: 0 },
+    { kind: 'EXPENSE', rows: 2, plannedCents: 4000, usedCents: 2500, priorCents: 100, priorFullCents: 0 },
   ]);
 });
 
 test('rows with nothing booked to them count as zero, not as missing', () => {
   const sections = sectionsOf([line('unbooked', 'Kulut', 'EXPENSE', 7000)], new Map(), new Map());
-  assert.deepEqual(sections[0].totals, [{ kind: 'EXPENSE', rows: 1, plannedCents: 7000, usedCents: 0, priorCents: 0 }]);
+  assert.deepEqual(sections[0].totals, [
+    { kind: 'EXPENSE', rows: 1, plannedCents: 7000, usedCents: 0, priorCents: 0, priorFullCents: 0 },
+  ]);
 });
 
 test('the same heading appearing twice stays two sections', () => {
@@ -80,4 +82,20 @@ test('a one-row section is its own total and gets no subtotal', () => {
   assert.equal(worthTotalling(only), false);
   const [two] = sectionsOf([line('a', 'Poistot', 'EXPENSE', 1), line('b', 'Poistot', 'EXPENSE', 1)], used, prior);
   assert.equal(worthTotalling(two), true);
+});
+
+test('last year in full is totalled alongside last year to date', () => {
+  // A calendar sale booked in November is nothing to date in September, but
+  // it is most of what the line took in over the year.
+  const [section] = sectionsOf(
+    [line('a', 'Varainhankinta', 'INCOME', 5000), line('b', 'Varainhankinta', 'INCOME', 3000)],
+    used,
+    prior,
+    new Map([
+      ['a', 1315209],
+      ['b', 200],
+    ]),
+  );
+  assert.equal(section.totals[0].priorCents, 1000);
+  assert.equal(section.totals[0].priorFullCents, 1315409);
 });
