@@ -88,7 +88,13 @@ function cumulative(items: CategoryItem[], from: string) {
   let total = 0;
   return [...items]
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map((item) => ({ day: dayOffset(item.date, from), total: (total += item.amountCents), id: item.id }));
+    .map((item) => ({
+      day: dayOffset(item.date, from),
+      total: (total += item.amountCents),
+      id: item.id,
+      description: item.description,
+      amountCents: item.amountCents,
+    }));
 }
 
 export function CategoryDetail(props: CategoryDetailProps) {
@@ -216,7 +222,7 @@ export function CategoryDetail(props: CategoryDetailProps) {
   );
 }
 
-type Point = { day: number; total: number; id: string };
+type Point = { day: number; total: number; id: string; description: string; amountCents: number };
 
 function Chart({
   totalDays,
@@ -287,6 +293,8 @@ function Chart({
   const dayToDate = (day: number) => new Date(Date.parse(periodStart) + day * DAY).toISOString().slice(0, 10);
 
   const hoverDay = hover === null ? null : Math.max(0, Math.min(totalDays, hover));
+  /** The booking the pointer has snapped to, which gets its own label over the chart. */
+  const active = activeId ? current.find((point) => point.id === activeId) : undefined;
 
   /** Moves the readout to whatever day sits under the pointer, snapping to a nearby booking. */
   const track = (event: React.PointerEvent<SVGSVGElement>) => {
@@ -490,6 +498,23 @@ function Chart({
           {shortDate(dayToDate(totalDays))}
         </text>
       </svg>
+      {active && (
+        <div
+          className="chart-tooltip"
+          style={{
+            left: `${(x(active.day) / width) * 100}%`,
+            top: `${(y(active.total) / height) * 100}%`,
+            // Anchored by its near edge towards the chart's sides, so a booking in
+            // January or December does not push its label off the modal.
+            transform: `translate(${x(active.day) < width * 0.3 ? '-12px' : x(active.day) > width * 0.7 ? 'calc(-100% + 12px)' : '-50%'}, calc(-100% - 12px))`,
+          }}
+        >
+          <strong>{active.description}</strong>
+          <span>
+            {fullDate(dayToDate(active.day))} · {moneyExact(active.amountCents, currency)}
+          </span>
+        </div>
+      )}
       <figcaption className="chart-readout">
         {hoverDay === null ? (
           <span className="label">
