@@ -105,11 +105,6 @@ export function CategoryDetail(props: CategoryDetailProps) {
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
-  useEffect(() => {
-    if (!activeId) return;
-    rowRefs.current.get(activeId)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [activeId]);
-
   const totalDays = Math.max(1, dayOffset(periodEnd, periodStart));
   const currentSeries = cumulative(props.current, periodStart);
   const previousSeries = cumulative(props.previous, previousStart);
@@ -182,6 +177,9 @@ export function CategoryDetail(props: CategoryDetailProps) {
               previous={previousSeries}
               activeId={activeId}
               onActiveChange={setActiveId}
+              // Only a click scrolls to the booking; following the pointer would
+              // yank the list about every time the mouse crossed the chart.
+              onJump={(id) => rowRefs.current.get(id)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })}
             />
 
             <h3 className="modal-subhead">Kirjaukset tänä vuonna</h3>
@@ -230,6 +228,7 @@ function Chart({
   previous,
   activeId,
   onActiveChange,
+  onJump,
 }: {
   totalDays: number;
   elapsedDays: number;
@@ -240,6 +239,7 @@ function Chart({
   previous: Point[];
   activeId: string | null;
   onActiveChange: (id: string | null) => void;
+  onJump: (id: string) => void;
 }) {
   const [hover, setHover] = useState<number | null>(null);
   /** True while a finger is down, so a touch scrubs only when it means to. */
@@ -302,6 +302,7 @@ function Chart({
       if (!nearest || Math.abs(point.day - day) < Math.abs(nearest.day - day)) nearest = point;
     }
     onActiveChange(nearest ? nearest.id : null);
+    return nearest?.id ?? null;
   };
   const clear = () => {
     setHover(null);
@@ -366,9 +367,11 @@ function Chart({
         }}
         onPointerUp={(event) => {
           scrubbing.current = false;
-          // The reading stays put when the finger lifts, because on a touch screen
-          // there is nothing left pointing at it to read it against.
-          if (event.pointerType === 'mouse') clear();
+          // A click, or the end of a scrub, jumps to the booking under it. The
+          // reading stays put: a mouse is still over the chart, and on a touch
+          // screen there is nothing left pointing at it to read it against.
+          const id = track(event);
+          if (id) onJump(id);
         }}
         onPointerCancel={() => {
           scrubbing.current = false;
