@@ -94,6 +94,7 @@ function cumulative(items: CategoryItem[], from: string) {
       id: item.id,
       description: item.description,
       amountCents: item.amountCents,
+      date: item.date,
     }));
 }
 
@@ -222,7 +223,7 @@ export function CategoryDetail(props: CategoryDetailProps) {
   );
 }
 
-type Point = { day: number; total: number; id: string; description: string; amountCents: number };
+type Point = { day: number; total: number; id: string; description: string; amountCents: number; date: string };
 
 function Chart({
   totalDays,
@@ -294,20 +295,30 @@ function Chart({
 
   const hoverDay = hover === null ? null : Math.max(0, Math.min(totalDays, hover));
   /** The booking the pointer has snapped to, which gets its own label over the chart. */
-  const active = activeId ? current.find((point) => point.id === activeId) : undefined;
+  const active = activeId
+    ? (current.find((point) => point.id === activeId) ?? previous.find((point) => point.id === activeId))
+    : undefined;
 
   /** Moves the readout to whatever day sits under the pointer, snapping to a nearby booking. */
   const track = (event: React.PointerEvent<SVGSVGElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
     const ratio = (event.clientX - box.left) / box.width;
-    const day = Math.round(((ratio * width - pad.left) / plotWidth) * totalDays);
+    const pointerX = ratio * width;
+    const pointerY = ((event.clientY - box.top) / box.height) * height;
+    const day = Math.round(((pointerX - pad.left) / plotWidth) * totalDays);
     setHover(day);
-    /** Snap to a booking only when the pointer is genuinely near one. */
+    /**
+     * Snap to a booking only when the pointer is genuinely near one. Both years
+     * share the x axis, so a day can hold a dot from each; the height of the
+     * pointer decides between them, measured in the chart's own units.
+     */
     const tolerance = Math.max(3, Math.round(totalDays / 60));
     let nearest: Point | null = null;
-    for (const point of current) {
+    let best = Infinity;
+    for (const point of [...current.filter((point) => point.day <= elapsedDays), ...previous]) {
       if (Math.abs(point.day - day) > tolerance) continue;
-      if (!nearest || Math.abs(point.day - day) < Math.abs(nearest.day - day)) nearest = point;
+      const distance = Math.hypot(x(point.day) - pointerX, y(point.total) - pointerY);
+      if (distance < best) [nearest, best] = [point, distance];
     }
     onActiveChange(nearest ? nearest.id : null);
     return nearest?.id ?? null;
@@ -421,7 +432,7 @@ function Chart({
             key={`p-${point.id}`}
             cx={x(point.day)}
             cy={y(point.total)}
-            r="2.5"
+            r={point.id === activeId ? 4.5 : 2.5}
             fill={PREVIOUS}
             stroke="var(--card)"
             strokeWidth="1.5"
@@ -511,7 +522,7 @@ function Chart({
         >
           <strong>{active.description}</strong>
           <span>
-            {fullDate(dayToDate(active.day))} · {moneyExact(active.amountCents, currency)}
+            {fullDate(active.date)} · {moneyExact(active.amountCents, currency)}
           </span>
         </div>
       )}
