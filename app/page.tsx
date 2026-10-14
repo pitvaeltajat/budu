@@ -419,7 +419,7 @@ function Dashboard({
   const columns = {
     planned: 'Arvio',
     used: closed ? 'Kaudella' : 'Tänä vuonna',
-    priorToDate: 'Viime v. samaan aikaan',
+    priorToDate: 'Viime vuonna samaan aikaan',
     prior: closed ? `Vuonna ${priorYear}` : 'Viime vuonna',
     remaining: 'Jäljellä',
   };
@@ -431,16 +431,27 @@ function Dashboard({
     elapsedDays,
     totalDays,
   });
+  /**
+   * The lede leads with where the budget stands, not with how the page is laid
+   * out: an open period that has its figures gets the one-line verdict the
+   * overview spells out below. A closed period compares whole years; one still
+   * waiting for Kitsas, or one the book has fallen behind on, has no verdict it
+   * can trust, so it keeps the plain description instead of asserting "on track".
+   */
+  const alertCount = pace.alerts.length;
+  const statusLine = closed
+    ? `Koko kausi verrattuna vuoteen ${priorYear}.`
+    : awaitingKitsas || stale
+      ? 'Kuluva kausi verrattuna viime vuoteen, sekä samaan aikaan että koko vuonna.'
+      : alertCount === 0
+        ? 'Menot ja tulot ovat arvion mukaisella uralla.'
+        : `${alertCount} ${alertCount === 1 ? 'kohta poikkeaa' : 'kohtaa poikkeaa'} arviostaan — tarkemmin yleiskuvassa alla.`;
   return (
     <>
       <p className="eyebrow">{closed ? 'Päättynyt talousarvio' : 'Nykyinen talousarvio'}</p>
       <h1>{budget.name}</h1>
       <PeriodSwitcher periods={periods} selectedId={budget.id} />
-      <p className="lede">
-        {closed
-          ? `Koko kausi verrattuna vuoteen ${priorYear}.`
-          : 'Kuluva kausi verrattuna viime vuoteen, sekä samaan aikaan että koko vuonna.'}
-      </p>
+      <p className="lede">{statusLine}</p>
       {stale && newestBooking && (
         <p className="notice">
           Kitsaan kirjanpito on jäljessä: uusin kirjaus on {date(newestBooking)}, {bookingLagDays} päivää sitten. Tämän
@@ -506,7 +517,8 @@ function Dashboard({
         ) : (
           <p className="label">
             {lastFetchedAt ? `Haettu Kitsaasta ${dateTime(lastFetchedAt)}.` : 'Kitsaasta ei ole vielä haettu tietoja.'}{' '}
-            {newestBooking && `Uusin kirjaus Kitsaassa ${date(newestBooking)}. `}
+            {/* The callout above already leads with the newest booking when stale, so it is not repeated here. */}
+            {!stale && newestBooking && `Uusin kirjaus Kitsaassa ${date(newestBooking)}. `}
             Tiedot päivittyvät kerran vuorokaudessa.
           </p>
         )}

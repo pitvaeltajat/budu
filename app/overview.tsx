@@ -48,9 +48,9 @@ function alertNote(alert: Alert, currency: string) {
     case 'unbudgeted':
       return `Kirjauksia ${money(alert.usedCents, currency)}, vaikka talousarviossa ei ole varausta.`;
     case 'income-none':
-      return `Tähän aikaan vuodesta pitäisi olla kertynyt ${money(alert.expectedCents, currency)}, eikä tuloja ole vielä lainkaan.`;
+      return 'Tuloja ei ole vielä kertynyt lainkaan.';
     case 'income-short':
-      return `Tähän aikaan vuodesta pitäisi olla kertynyt ${money(alert.expectedCents, currency)}, kertynyt ${money(alert.usedCents, currency)}.`;
+      return `Jäljessä ${money(alert.expectedCents - alert.usedCents, currency)} tavoitteesta.`;
   }
 }
 
@@ -99,20 +99,8 @@ export function Overview({
         <span className="label">kuluva kausi suhteessa arvioon</span>
       </div>
       <div className="overview-totals">
-        <MeterRow
-          name="Menot"
-          tone={expenseTone(expense)}
-          totals={expense}
-          currency={currency}
-          note={`Tähän aikaan vuodesta arvioitu ${money(expense.expectedCents, currency)}.`}
-        />
-        <MeterRow
-          name="Tulot"
-          tone={incomeTone(income)}
-          totals={income}
-          currency={currency}
-          note={`Tähän aikaan vuodesta arvioitu ${money(income.expectedCents, currency)}.`}
-        />
+        <MeterRow name="Menot" tone={expenseTone(expense)} totals={expense} currency={currency} />
+        <MeterRow name="Tulot" tone={incomeTone(income)} totals={income} currency={currency} />
       </div>
       <p className="meter-legend">
         <span>
@@ -176,7 +164,7 @@ function MeterRow({
   label?: string;
   totals: Totals;
   currency: string;
-  note: string;
+  note?: string;
 }) {
   /** The track runs to whichever is larger, so an overrun stays visible instead of pinning at full. */
   const scale = Math.max(totals.plannedCents, totals.usedCents, totals.expectedCents, 1);
@@ -201,7 +189,12 @@ function MeterRow({
           {totals.expectedCents > 0 && <span className="meter-now" style={{ left: `${pct(totals.expectedCents)}%` }} />}
         </div>
       </div>
-      <span className="label">{note}</span>
+      {/* The solid tick in euros, named as the legend names it, so the fill-vs-tick
+          read does not depend on judging a pixel position against the track. */}
+      {totals.expectedCents > 0 && (
+        <span className="label">Tavoitetaso tänään {money(totals.expectedCents, currency)}</span>
+      )}
+      {note && <span className="label">{note}</span>}
     </div>
   );
 }
