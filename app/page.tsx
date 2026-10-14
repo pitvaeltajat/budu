@@ -371,6 +371,15 @@ function Dashboard({
     (latest, item) => (!latest || item.occurredOn > latest ? item.occurredOn : latest),
     null,
   );
+  /**
+   * How far behind today the book itself is. Only meaningful for an open period,
+   * where `periodEnd` is now: a closed period's newest booking is bounded by its
+   * end date, so it is "stale" by definition and the callout would mislead. Two
+   * weeks is the line — the Holvi import runs by hand, and a day or two behind is
+   * normal, but a fortnight means the figures below are quietly short.
+   */
+  const bookingLagDays = newestBooking ? Math.floor((now.getTime() - newestBooking.getTime()) / 86_400_000) : 0;
+  const stale = !awaitingKitsas && !closed && newestBooking !== null && bookingLagDays >= 14;
   /** The table's sections, each carrying its own totals; see lib/budget-groups.ts. */
   const sections = sectionsOf(budget.lines, byCategory, previousByCategory, previousFullByCategory);
   /**
@@ -432,6 +441,12 @@ function Dashboard({
           ? `Koko kausi verrattuna vuoteen ${priorYear}.`
           : 'Kuluva kausi verrattuna viime vuoteen, sekä samaan aikaan että koko vuonna.'}
       </p>
+      {stale && newestBooking && (
+        <p className="notice">
+          Kitsaan kirjanpito on jäljessä: uusin kirjaus on {date(newestBooking)}, {bookingLagDays} päivää sitten. Tämän
+          jälkeiset menot ja tulot eivät vielä näy, joten luvut voivat näyttää todellista pienemmiltä.
+        </p>
+      )}
       {!configured && <p className="notice">Kitsasta ei ole vielä yhdistetty. Mitään tietoja ei haeta ulkopuolelta.</p>}
       {unmapped.accounts > 0 && (
         <p className="notice">
