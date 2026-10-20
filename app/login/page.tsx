@@ -35,11 +35,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <main className="signin">
       <section className="card">
         <PitvaLogo title="Pitkäjärven Vaeltajat ry" />
-        <h1>Mihin PitVan rahat menevät?</h1>
-        <p>
-          Kirjaudu lippukunnan {domain}-tilillä, niin näet talousarvion rinnalla sen, mitä kolo, kammi ja retket ovat
-          tänä vuonna todella maksaneet.
-        </p>
         {notice ? <p className="notice">{notice}</p> : null}
         <form
           action={async () => {
